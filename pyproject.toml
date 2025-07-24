@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "planner-bot"
+version = "0.1.0"
+description = "Conversational AI project planning bot"
+authors = ["Project Team"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+langgraph = "^0.2.0"
+fastapi = "^0.100.0"
+uvicorn = "^0.23.0"
+python-dotenv = "^1.0.0"
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
