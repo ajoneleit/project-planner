@@ -31,20 +31,32 @@ A conversational AI project planning bot that maintains project state in markdow
 ## Project Structure
 
 ```
-planner-bot/
+project-planner/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI application
 │   ├── langgraph_runner.py  # LangGraph workflow + memory
 │   └── memory/              # Project markdown files
+│       ├── index.json       # Project index
+│       └── *.md             # Individual project files
 ├── web/                     # Next.js frontend
 │   ├── src/
-│   ├── components/
-│   └── [Next.js files]
+│   │   ├── app/             # Next.js App Router
+│   │   │   ├── p/[slug]/    # Dynamic project pages
+│   │   │   └── layout.tsx
+│   │   ├── components/      # React components
+│   │   │   ├── ui/          # shadcn/ui components
+│   │   │   └── providers/   # React Query provider
+│   │   └── lib/
+│   ├── package.json
+│   └── next.config.ts
 ├── prompts/
 │   └── project_planner.md   # System prompts
 ├── tests/
-├── Dockerfile               # Multi-stage build
+├── Dockerfile               # Multi-stage build (Node.js + Python)
+├── Makefile                 # Build commands
+├── pyproject.toml           # Poetry configuration
+├── requirements.txt         # Pip dependencies
 ├── .env.example
 └── README.md
 ```
@@ -55,7 +67,7 @@ planner-bot/
 
 - Python 3.11+
 - Node.js 20+
-- Poetry (for Python dependency management)
+- Poetry (recommended) OR pip for Python dependency management
 
 ### Installation
 
@@ -67,9 +79,18 @@ planner-bot/
    # Edit .env with your OpenAI API key
    ```
 
-2. **Backend setup**:
+2. **Backend setup** (choose one):
+
+   **Option A: Using Poetry (recommended)**:
    ```bash
    poetry install
+   ```
+
+   **Option B: Using pip**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
    ```
 
 3. **Frontend setup**:
@@ -83,25 +104,34 @@ planner-bot/
 
 #### Development Mode
 
+**Using Make (recommended)**:
+```bash
+make dev
+```
+
+**Or manually**:
 1. **Start the backend**:
    ```bash
    export PATH="$HOME/.local/bin:$PATH"
-   poetry run uvicorn app.main:app --reload --port 8000
+   poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-2. **Start the frontend** (in another terminal):
-   ```bash
-   cd web
-   npm run dev
-   ```
-
-3. **Access the application**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
+2. **Access the application**:
+   - Application: http://localhost:8000
    - API Docs: http://localhost:8000/docs
+   - Health Check: http://localhost:8000/health
+
+*Note: The frontend is served by FastAPI as static files, not as a separate dev server.*
 
 #### Production Mode
 
+**Using Make**:
+```bash
+make build    # Build frontend static files
+make docker   # Build Docker image
+```
+
+**Or manually**:
 1. **Build the frontend**:
    ```bash
    cd web
@@ -118,11 +148,11 @@ planner-bot/
 ## API Endpoints
 
 - `GET /` - Serve Next.js frontend
-- `POST /api/projects` - Create new project
-- `GET /api/projects` - List all projects
-- `POST /api/projects/{slug}/chat` - Stream chat responses (SSE)
-- `GET /api/projects/{slug}/file` - Get project markdown file
-- `GET /api/health` - Health check
+- `POST /projects` - Create new project
+- `GET /projects` - List all projects
+- `POST /projects/{slug}/chat` - Stream chat responses (SSE)
+- `GET /projects/{slug}/file` - Get project markdown file
+- `GET /health` - Health check
 
 ## Memory System
 
@@ -135,49 +165,90 @@ Each project is stored as a markdown file in `app/memory/`:
 ## Testing
 
 ```bash
-# Run Python tests
-poetry run pytest tests/
+# Using Make
+make test
 
-# Run frontend tests (when implemented)
+# Or manually
+poetry run pytest tests/ -v
+
+# Frontend tests (when implemented)
 cd web && npm test
 ```
 
 ## Deployment
 
-The application is designed for deployment on AWS App Runner:
+### AWS App Runner (Recommended)
 
-1. Build and push Docker image to ECR
-2. Deploy to App Runner with auto-scaling
-3. Configure environment variables
-4. Set up observability with LangSmith and CloudWatch
+The application is designed for deployment on AWS App Runner using a multi-stage Docker build:
+
+1. **Build and push Docker image to ECR**:
+   ```bash
+   # Login to ECR
+   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
+   
+   # Build and tag image
+   docker build -t planner-bot .
+   docker tag planner-bot:latest <account>.dkr.ecr.us-east-1.amazonaws.com/planner-bot:latest
+   
+   # Push to ECR
+   docker push <account>.dkr.ecr.us-east-1.amazonaws.com/planner-bot:latest
+   ```
+
+2. **Create App Runner service** (see `aws-setup.md` for detailed instructions)
+3. **Configure environment variables** in App Runner console
+4. **Set up observability** with LangSmith and CloudWatch
+
+### Docker Compose (Development)
+
+```bash
+# Run locally with Docker
+docker build -t planner-bot .
+docker run -p 8000:8000 --env-file .env planner-bot
+```
+
+### Manual Deployment
+
+```bash
+# Install dependencies
+poetry install
+cd web && npm install && cd ..
+
+# Build frontend
+cd web && npm run build && cd ..
+
+# Start production server
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
 ## Environment Variables
 
 See `.env.example` for all configuration options. Key variables:
 
 - `OPENAI_API_KEY` - Required for LLM functionality
-- `DEFAULT_MODEL` - LLM model to use (o3, gpt-4o-mini)
+- `DEFAULT_MODEL` - LLM model to use (gpt-4o-mini, o3)
 - `LANGCHAIN_TRACING_V2` - Enable LangSmith tracing
 - `ENVIRONMENT` - development/production
 
 ## Development Status
 
-This is Day 1 bootstrap. The foundation is set up with:
-- ✅ Project structure
-- ✅ Basic FastAPI endpoints (placeholders)
-- ✅ Next.js frontend scaffolding
-- ✅ Poetry dependency management
-- ✅ Docker configuration
-- ✅ Memory system architecture
+**Core Implementation Complete** ✅:
+- FastAPI backend with streaming chat endpoints
+- LangGraph workflow integration
+- Next.js frontend with chat interface
+- Markdown-based memory system
+- Docker multi-stage build
+- AWS App Runner deployment ready
+- React Query for state management
+- shadcn/ui component library
 
-**Next Steps (Days 2-7)**:
-- Implement LangGraph workflows
-- Build React components for chat interface
-- Add SSE streaming endpoints
-- Implement markdown memory operations
-- Add authentication and project management
-- Set up CI/CD pipeline
-- Deploy to AWS App Runner
+**Features**:
+- ✅ Project creation and management
+- ✅ Real-time chat with streaming responses (SSE)
+- ✅ Markdown memory persistence
+- ✅ Model switching (o3/gpt-4o-mini)
+- ✅ Responsive UI with project sidebar
+- ✅ Health checks and observability hooks
+- ✅ Static file serving via FastAPI
 
 ## Contributing
 

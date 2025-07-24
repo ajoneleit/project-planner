@@ -1,15 +1,16 @@
-# Multi-stage Dockerfile for Project Planner Bot
-# Stage 1: Build Next.js frontend
-FROM node:20-alpine AS web-builder
+# ---------- Frontend Build Stage ----------
+FROM node:20-alpine AS web
+WORKDIR /app
 
-WORKDIR /app/web
-COPY web/package*.json ./
-RUN npm ci --only=production
+# Copy package files for better caching
+COPY web/package*.json ./web/
+RUN npm --prefix web ci
 
-COPY web/ ./
-RUN npm run build
+# Copy source and build
+COPY web ./web
+RUN npm --prefix web run build
 
-# Stage 2: Python backend with static files
+# ---------- Backend Build Stage ----------
 FROM python:3.11-slim AS api
 
 # Install system dependencies
@@ -17,35 +18,45 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN pip install poetry
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Set working directory
 WORKDIR /app
 
-# Copy Poetry files
-COPY pyproject.toml poetry.lock* ./
+# Copy Python dependency files
+COPY requirements.txt ./
 
-# Configure Poetry and install dependencies
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-dev --no-interaction --no-ansi
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app/ ./app/
-COPY prompts/ ./prompts/
+COPY app ./app
+COPY prompts ./prompts
 
-# Copy built frontend from previous stage
-COPY --from=web-builder /app/web/out ./web/out
+# Copy static files from frontend build
+COPY --from=web /app/web/.next ./web/.next
+COPY --from=web /app/web/public ./web/public
+COPY --from=web /app/web/package.json ./web/package.json
 
-# Create memory directory
-RUN mkdir -p app/memory
+# Create necessary directories and set permissions
+RUN mkdir -p app/memory \
+    && chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV PORT=8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
-
-# Run the application
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start command
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

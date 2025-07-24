@@ -1,15 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
-  trailingSlash: true,
+  // Removed static export for now - will serve via FastAPI
+  // output: "export",
+  // trailingSlash: true,
   images: {
-    unoptimized: true
+    unoptimized: true,
   },
-  // Disable server-based features for static export
-  // Ensure static files work with FastAPI serving
-  basePath: "",
-  assetPrefix: "",
+  // Removed rewrites - using direct backend calls instead
 };
 
 export default nextConfig;

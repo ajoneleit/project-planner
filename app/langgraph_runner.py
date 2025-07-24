@@ -220,8 +220,9 @@ async def stream_chat_response(
             if chunk and len(chunk) > 0:
                 message_chunk = chunk[-1]
                 if hasattr(message_chunk, 'content') and message_chunk.content:
-                    # Stream token by token for better UX
-                    for token in message_chunk.content:
+                    # Stream the entire content as individual tokens
+                    content = str(message_chunk.content)
+                    for token in content:
                         yield f"data: {json.dumps({'token': token})}\n\n"
                         await asyncio.sleep(0.01)  # Small delay for smoother streaming
         

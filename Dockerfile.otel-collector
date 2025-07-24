@@ -1,0 +1,13 @@
+FROM otel/opentelemetry-collector-contrib:latest
+
+# Copy configuration
+COPY otel-collector-config.yaml /etc/otel-collector-config.yaml
+
+# The base image already has a non-root user 'otelcol' with UID 10001
+# No need to create additional users
+
+# Expose ports
+EXPOSE 4317 4318
+
+# Start collector with proper configuration
+CMD ["--config=/etc/otel-collector-config.yaml"]

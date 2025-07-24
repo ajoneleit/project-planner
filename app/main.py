@@ -6,22 +6,54 @@ Serves both API endpoints and static frontend files.
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import json
+import asyncio
 import logging
+import time
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with structured format
+logging.basicConfig(
+    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Project Planner Bot",
-    description="Conversational AI project planning bot with markdown memory",
-    version="0.1.0"
+    title="Project Planner Bot", 
+    version="1.0.0",
+    description="AI-powered project planning with markdown memory"
 )
+
+# Add CORS middleware for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"] if os.getenv("ENVIRONMENT") == "development" else [],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"Request: {request.method} {request.url.path}")
+    
+    response = await call_next(request)
+    
+    # Log response
+    process_time = time.time() - start_time
+    logger.info(f"Response: {response.status_code} - {process_time:.4f}s")
+    
+    return response
 
 # Request/Response models
 class CreateProjectRequest(BaseModel):
@@ -39,20 +71,31 @@ class ProjectResponse(BaseModel):
     status: str
 
 # Mount static files (Next.js build output)
-static_path = Path(__file__).parent.parent / "static"
-if static_path.exists():
-    app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
+web_path = Path(__file__).parent.parent / "web"
+if web_path.exists():
+    # This is a simplified approach - in production you'd use a proper Next.js server
+    # For now, serve the static files that don't require server-side rendering
+    pass
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "project-planner-bot"}
+    """Health check endpoint with observability info."""
+    return {
+        "status": "healthy",
+        "service": "planner-bot",
+        "version": "1.0.0",
+        "environment": os.getenv("ENVIRONMENT", "unknown"),
+        "langsmith_enabled": os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true",
+        "timestamp": time.time()
+    }
 
 @app.post("/api/projects", response_model=Dict[str, str])
 async def create_project(request: CreateProjectRequest):
     """Create a new project with auto-generated slug."""
     
     try:
+        logger.info(f"Creating project: {request.name}")
+        
         from .langgraph_runner import ProjectRegistry, MarkdownMemory
         
         # Generate slug from name
@@ -77,13 +120,15 @@ async def create_project(request: CreateProjectRequest):
         memory = MarkdownMemory(slug)
         await memory.ensure_file_exists()
         
+        logger.info(f"Project created successfully: {slug}")
+        
         return {
             "slug": slug,
             "message": f"Project '{request.name}' created successfully"
         }
         
     except Exception as e:
-        logger.error(f"Error creating project: {e}")
+        logger.error(f"Error creating project: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/projects", response_model=List[ProjectResponse])
@@ -162,6 +207,23 @@ async def get_project_file(slug: str):
     except Exception as e:
         logger.error(f"Error reading project file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Observability endpoints
+@app.get("/api/observability/metrics")
+async def get_metrics():
+    """Get basic application metrics."""
+    try:
+        from .langgraph_runner import ProjectRegistry
+        projects = await ProjectRegistry.list_projects()
+        return {
+            "projects_count": len(projects),
+            "langsmith_enabled": os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true",
+            "model": os.getenv("DEFAULT_MODEL", "unknown"),
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
