@@ -1,10 +1,12 @@
 import pytest
-import asyncio
-import json
 import tempfile
 import shutil
+import sys
 from pathlib import Path
 from unittest.mock import patch, AsyncMock
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.langgraph_runner import (
     MarkdownMemory, 
@@ -13,14 +15,18 @@ from app.langgraph_runner import (
     stream_chat_response
 )
 from app.main import app
-from fastapi.testclient import TestClient
+
+try:
+    from fastapi.testclient import TestClient
+except ImportError:
+    # Fallback for testing without FastAPI installed
+    TestClient = None
 
 # Test fixtures
 @pytest.fixture
 def temp_memory_dir():
     """Create a temporary directory for testing."""
     temp_dir = tempfile.mkdtemp()
-    original_memory_dir = Path("app/memory")
     
     # Mock the memory directory
     with patch('app.langgraph_runner.MEMORY_DIR', Path(temp_dir)):
@@ -33,12 +39,15 @@ def temp_memory_dir():
 @pytest.fixture
 def client():
     """FastAPI test client."""
+    if TestClient is None:
+        pytest.skip("FastAPI not available for testing")
     return TestClient(app)
 
 # Test MarkdownMemory
 @pytest.mark.asyncio
 async def test_markdown_memory_creation(temp_memory_dir):
     """Test markdown file creation and initial content."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     memory = MarkdownMemory("test-project")
     
     await memory.ensure_file_exists()
@@ -52,6 +61,7 @@ async def test_markdown_memory_creation(temp_memory_dir):
 @pytest.mark.asyncio
 async def test_markdown_memory_append_qa(temp_memory_dir):
     """Test appending Q&A pairs to markdown."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     memory = MarkdownMemory("test-project")
     
     await memory.ensure_file_exists()
@@ -64,6 +74,7 @@ async def test_markdown_memory_append_qa(temp_memory_dir):
 @pytest.mark.asyncio
 async def test_markdown_memory_conversation_history(temp_memory_dir):
     """Test extracting conversation history."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     memory = MarkdownMemory("test-project")
     
     await memory.ensure_file_exists()
@@ -79,6 +90,7 @@ async def test_markdown_memory_conversation_history(temp_memory_dir):
 @pytest.mark.asyncio
 async def test_project_registry_operations(temp_memory_dir):
     """Test project registry CRUD operations."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     # Test empty registry
     index = await ProjectRegistry.load_index()
     assert index == {}
@@ -106,6 +118,7 @@ def test_health_endpoint(client):
 @pytest.mark.asyncio
 async def test_create_project_endpoint(client, temp_memory_dir):
     """Test project creation endpoint."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     with patch('app.main.ProjectRegistry') as mock_registry:
         mock_registry.list_projects = AsyncMock(return_value={})
         mock_registry.add_project = AsyncMock()
@@ -150,6 +163,7 @@ async def test_list_projects_endpoint(client):
 @pytest.mark.asyncio
 async def test_make_graph_creation(temp_memory_dir):
     """Test LangGraph workflow creation."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     with patch('app.langgraph_runner.ChatOpenAI') as mock_llm:
         mock_llm.return_value = AsyncMock()
         
@@ -165,13 +179,14 @@ async def test_make_graph_creation(temp_memory_dir):
 @pytest.mark.asyncio 
 async def test_stream_chat_response(temp_memory_dir):
     """Test streaming chat response."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     with patch('app.langgraph_runner.make_graph') as mock_make_graph:
         # Mock the graph and its streaming response
         mock_graph = AsyncMock()
         mock_response = AsyncMock()
         mock_response.content = "Test response"
         
-        async def mock_astream(*args, **kwargs):
+        async def mock_astream(*_args, **_kwargs):
             yield [mock_response]
         
         mock_graph.astream = mock_astream
@@ -189,6 +204,7 @@ async def test_stream_chat_response(temp_memory_dir):
 @pytest.mark.asyncio
 async def test_full_project_workflow(temp_memory_dir):
     """Test complete project creation and chat workflow."""
+    _ = temp_memory_dir  # Use the fixture to avoid warning
     # Create project
     await ProjectRegistry.add_project("integration-test", {"name": "Integration Test"})
     
