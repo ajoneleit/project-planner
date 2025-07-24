@@ -4,119 +4,231 @@ Handles conversation state, markdown file operations, and LangGraph execution.
 """
 
 import asyncio
+import aiofiles
+import json
 import os
-from pathlib import Path
-from typing import Dict, Any, Optional
-import yaml
 from datetime import datetime
+from typing import Dict, Any, AsyncGenerator, Optional
+from pathlib import Path
+import logging
+
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import MessagesState
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
+logger = logging.getLogger(__name__)
+
+MEMORY_DIR = Path("app/memory")
+INDEX_FILE = MEMORY_DIR / "index.json"
 
 class MarkdownMemory:
-    """Manages markdown file-based memory for project conversations."""
+    """Handles async reading/writing of project markdown files with proper locking."""
     
-    def __init__(self, memory_dir: str = "app/memory"):
-        self.memory_dir = Path(memory_dir)
-        self.memory_dir.mkdir(exist_ok=True)
-        self._locks: Dict[str, asyncio.Lock] = {}
+    def __init__(self, project_slug: str):
+        self.project_slug = project_slug
+        self.file_path = MEMORY_DIR / f"{project_slug}.md"
+        self._lock = asyncio.Lock()
     
-    def _get_lock(self, project_slug: str) -> asyncio.Lock:
-        """Get or create a lock for a specific project file."""
-        if project_slug not in self._locks:
-            self._locks[project_slug] = asyncio.Lock()
-        return self._locks[project_slug]
+    async def ensure_file_exists(self) -> None:
+        """Create markdown file if it doesn't exist."""
+        if not self.file_path.exists():
+            await self._create_initial_file()
     
-    async def create_project(self, project_slug: str, metadata: Dict[str, Any]) -> Path:
-        """Create a new project markdown file with metadata."""
-        file_path = self.memory_dir / f"{project_slug}.md"
-        
-        async with self._get_lock(project_slug):
-            if file_path.exists():
-                raise ValueError(f"Project {project_slug} already exists")
-            
-            # Create initial markdown content
-            content = f"""# Project: {metadata.get('title', project_slug)}
+    async def _create_initial_file(self) -> None:
+        """Create initial markdown file with metadata."""
+        async with self._lock:
+            content = f"""# {self.project_slug.replace('-', ' ').title()}
 
-## Metadata
-- **Created**: {datetime.now().isoformat()}
-- **Slug**: {project_slug}
-- **Description**: {metadata.get('description', 'No description provided')}
+**Created:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+**Status:** Active
+**Type:** Project Planning
+
+## Project Overview
+This project was created through the Project Planner Bot.
 
 ## Conversation History
 
 """
-            file_path.write_text(content)
-            return file_path
+            async with aiofiles.open(self.file_path, 'w', encoding='utf-8') as f:
+                await f.write(content)
     
-    async def append_conversation(self, project_slug: str, question: str, answer: str):
-        """Append a Q&A pair to the project's conversation history."""
-        file_path = self.memory_dir / f"{project_slug}.md"
-        
-        async with self._get_lock(project_slug):
-            if not file_path.exists():
-                raise FileNotFoundError(f"Project {project_slug} not found")
+    async def read_content(self) -> str:
+        """Read the full markdown content."""
+        await self.ensure_file_exists()
+        async with aiofiles.open(self.file_path, 'r', encoding='utf-8') as f:
+            return await f.read()
+    
+    async def append_qa(self, question: str, answer: str) -> None:
+        """Append a Q&A pair to the markdown file."""
+        async with self._lock:
+            await self.ensure_file_exists()
             
-            # Append Q&A to the file
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            qa_content = f"""
-### Q: {question}
-*Asked on {timestamp}*
-
-{answer}
-
----
+            qa_content = f"""### Q: {question}
+**A:** {answer}
 
 """
-            with open(file_path, 'a', encoding='utf-8') as f:
-                f.write(qa_content)
+            async with aiofiles.open(self.file_path, 'a', encoding='utf-8') as f:
+                await f.write(qa_content)
     
-    async def read_project_file(self, project_slug: str) -> str:
-        """Read the entire project markdown file."""
-        file_path = self.memory_dir / f"{project_slug}.md"
+    async def get_conversation_history(self) -> str:
+        """Extract conversation history for context."""
+        content = await self.read_content()
         
-        async with self._get_lock(project_slug):
-            if not file_path.exists():
-                raise FileNotFoundError(f"Project {project_slug} not found")
-            
-            return file_path.read_text(encoding='utf-8')
-    
-    async def list_projects(self) -> list[str]:
-        """List all project slugs."""
-        return [f.stem for f in self.memory_dir.glob("*.md")]
-
-
-def make_graph(md_path: str, model: str = "gpt-4o-mini"):
-    """
-    Create a LangGraph conversation graph for a specific project.
-    
-    Args:
-        md_path: Path to the project's markdown file
-        model: LLM model to use (o3, gpt-4o-mini, etc.)
-    
-    Returns:
-        Compiled LangGraph workflow
-    """
-    # TODO: Implement LangGraph workflow
-    # This will include:
-    # 1. Load project context from markdown
-    # 2. Set up conversation state
-    # 3. Configure LLM with project planner prompts
-    # 4. Return compiled graph for streaming execution
-    
-    class ProjectPlannerGraph:
-        def __init__(self, md_path: str, model: str):
-            self.md_path = md_path
-            self.model = model
+        # Find the "Conversation History" section
+        if "## Conversation History" in content:
+            history_start = content.find("## Conversation History")
+            return content[history_start:]
         
-        async def stream_response(self, message: str):
-            """Stream a response for the given message."""
-            # TODO: Implement actual LangGraph streaming
-            yield f"[{self.model}] Processing: {message}"
-            yield f"[{self.model}] This is a placeholder response for project planning."
-            yield f"[{self.model}] Model: {self.model}, Context: {self.md_path}"
-    
-    return ProjectPlannerGraph(md_path, model)
+        return ""
 
+class ProjectRegistry:
+    """Manages the index.json file that tracks all projects."""
+    
+    @staticmethod
+    async def load_index() -> Dict[str, Any]:
+        """Load the project index."""
+        if not INDEX_FILE.exists():
+            return {}
+        
+        async with aiofiles.open(INDEX_FILE, 'r', encoding='utf-8') as f:
+            content = await f.read()
+            return json.loads(content) if content.strip() else {}
+    
+    @staticmethod
+    async def save_index(index: Dict[str, Any]) -> None:
+        """Save the project index."""
+        INDEX_FILE.parent.mkdir(exist_ok=True)
+        
+        async with aiofiles.open(INDEX_FILE, 'w', encoding='utf-8') as f:
+            await f.write(json.dumps(index, indent=2))
+    
+    @staticmethod
+    async def add_project(slug: str, metadata: Dict[str, Any] = None) -> None:
+        """Add a project to the index."""
+        index = await ProjectRegistry.load_index()
+        
+        index[slug] = {
+            "created": datetime.now().isoformat(),
+            "file_path": f"{slug}.md",
+            "status": "active",
+            **(metadata or {})
+        }
+        
+        await ProjectRegistry.save_index(index)
+    
+    @staticmethod
+    async def list_projects() -> Dict[str, Any]:
+        """List all projects."""
+        return await ProjectRegistry.load_index()
+
+def make_graph(project_slug: str, model: str = "gpt-4o-mini") -> StateGraph:
+    """Create a LangGraph workflow for the project planner."""
+    
+    # Initialize the LLM
+    llm = ChatOpenAI(
+        model=model,
+        temperature=0.1,
+        streaming=True
+    )
+    
+    # Initialize memory
+    memory = MarkdownMemory(project_slug)
+    
+    async def load_system_prompt() -> str:
+        """Load the system prompt from prompts/project_planner.md"""
+        prompt_file = Path("prompts/project_planner.md")
+        if prompt_file.exists():
+            async with aiofiles.open(prompt_file, 'r', encoding='utf-8') as f:
+                return await f.read()
+        
+        # Fallback system prompt
+        return """You are a helpful project planning assistant. You help users break down complex projects into manageable tasks, set priorities, and track progress.
+
+Key capabilities:
+- Analyze project requirements and scope
+- Break down large projects into smaller tasks
+- Suggest timelines and milestones
+- Identify potential risks and dependencies
+- Provide project management best practices
+
+Always be practical, actionable, and focused on helping users make real progress on their projects."""
+    
+    async def planning_node(state: MessagesState) -> Dict[str, Any]:
+        """Main planning node that processes user input and generates responses."""
+        
+        # Get conversation history for context
+        history = await memory.get_conversation_history()
+        
+        # Load system prompt
+        system_prompt = await load_system_prompt()
+        
+        # Build context-aware system message
+        context_prompt = f"""{system_prompt}
+
+CONVERSATION CONTEXT:
+{history}
+
+Remember to maintain consistency with previous discussions and build upon the established project context."""
+        
+        messages = [SystemMessage(content=context_prompt)] + state["messages"]
+        
+        # Generate response
+        response = await llm.ainvoke(messages)
+        
+        # Save to markdown memory
+        if state["messages"]:
+            last_message = state["messages"][-1]
+            if isinstance(last_message, HumanMessage):
+                await memory.append_qa(
+                    question=last_message.content,
+                    answer=response.content
+                )
+        
+        return {"messages": state["messages"] + [response]}
+    
+    # Build the graph
+    workflow = StateGraph(MessagesState)
+    workflow.add_node("planner", planning_node)
+    workflow.set_entry_point("planner")
+    workflow.add_edge("planner", END)
+    
+    return workflow.compile()
+
+async def stream_chat_response(
+    project_slug: str, 
+    message: str, 
+    model: str = "gpt-4o-mini"
+) -> AsyncGenerator[str, None]:
+    """Stream a chat response for a given project."""
+    
+    try:
+        # Create the graph
+        graph = make_graph(project_slug, model)
+        
+        # Prepare the input
+        input_data = {
+            "messages": [HumanMessage(content=message)]
+        }
+        
+        # Stream the response
+        async for chunk in graph.astream(input_data, stream_mode="messages"):
+            if chunk and len(chunk) > 0:
+                message_chunk = chunk[-1]
+                if hasattr(message_chunk, 'content') and message_chunk.content:
+                    # Stream token by token for better UX
+                    for token in message_chunk.content:
+                        yield f"data: {json.dumps({'token': token})}\n\n"
+                        await asyncio.sleep(0.01)  # Small delay for smoother streaming
+        
+        # End the stream
+        yield f"data: {json.dumps({'done': True})}\n\n"
+        
+    except Exception as e:
+        logger.error(f"Error in stream_chat_response: {e}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 async def initialize_memory() -> MarkdownMemory:
     """Initialize the markdown memory system."""
-    memory = MarkdownMemory()
+    memory = MarkdownMemory("default")
     return memory
