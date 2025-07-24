@@ -13,14 +13,18 @@ from pathlib import Path
 import logging
 
 from langgraph.graph import StateGraph, END
-from langgraph.graph.message import MessagesState
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from typing import TypedDict, List
 
 logger = logging.getLogger(__name__)
 
 MEMORY_DIR = Path("app/memory")
 INDEX_FILE = MEMORY_DIR / "index.json"
+
+# State structure for LangGraph
+class GraphState(TypedDict):
+    messages: List[HumanMessage | AIMessage | SystemMessage]
 
 class MarkdownMemory:
     """Handles async reading/writing of project markdown files with proper locking."""
@@ -154,7 +158,7 @@ Key capabilities:
 
 Always be practical, actionable, and focused on helping users make real progress on their projects."""
     
-    async def planning_node(state: MessagesState) -> Dict[str, Any]:
+    async def planning_node(state: GraphState) -> Dict[str, Any]:
         """Main planning node that processes user input and generates responses."""
         
         # Get conversation history for context
@@ -188,7 +192,7 @@ Remember to maintain consistency with previous discussions and build upon the es
         return {"messages": state["messages"] + [response]}
     
     # Build the graph
-    workflow = StateGraph(MessagesState)
+    workflow = StateGraph(GraphState)
     workflow.add_node("planner", planning_node)
     workflow.set_entry_point("planner")
     workflow.add_edge("planner", END)
