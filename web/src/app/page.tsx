@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus } from 'lucide-react'
+import { Loader2, AlertCircle, RefreshCw, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { apiRequest, healthCheck } from '@/lib/api'
 
 interface Project {
   slug: string
@@ -17,25 +18,7 @@ interface Project {
 }
 
 async function fetchProjects(): Promise<Project[]> {
-  try {
-    const apiUrl = 'http://172.29.56.210:8001/api/projects'
-    console.log('Fetching projects from', apiUrl)
-    const response = await fetch(apiUrl)
-    console.log('Response status:', response.status)
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('API Error:', response.status, errorText)
-      throw new Error(`Failed to fetch projects: ${response.status} ${errorText}`)
-    }
-    
-    const data = await response.json()
-    console.log('Projects data:', data)
-    return data
-  } catch (error) {
-    console.error('Fetch error:', error)
-    throw error
-  }
+  return apiRequest<Project[]>('/api/projects')
 }
 
 interface CreateProjectData {
@@ -44,33 +27,41 @@ interface CreateProjectData {
 }
 
 async function createProject(data: CreateProjectData): Promise<{ slug: string; message: string }> {
-  const response = await fetch('http://172.29.56.210:8001/api/projects', {
+  return apiRequest<{ slug: string; message: string }>('/api/projects', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(data),
   })
-  
-  if (!response.ok) {
-    throw new Error('Failed to create project')
-  }
-  
-  return response.json()
 }
 
 export default function HomePage() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null)
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
   
-  const { data: projects, isLoading, error } = useQuery({
+  const { data: projects, isLoading, error, refetch } = useQuery({
     queryKey: ['projects'],
     queryFn: fetchProjects,
+    retry: 3,
+    retryDelay: 1000,
   })
+
+  // Check API health on mount
+  useEffect(() => {
+    const checkHealth = async () => {
+      const healthy = await healthCheck()
+      setApiHealthy(healthy)
+      
+      if (!healthy) {
+        console.warn('API health check failed')
+      }
+    }
+    
+    checkHealth()
+  }, [])
 
   const createProjectMutation = useMutation({
     mutationFn: createProject,
@@ -81,6 +72,9 @@ export default function HomePage() {
       setNewProjectDescription('')
       router.push(`/p/${data.slug}`)
     },
+    onError: (error) => {
+      console.error('Failed to create project:', error)
+    }
   })
 
   const handleCreateProject = () => {
@@ -92,6 +86,11 @@ export default function HomePage() {
     }
   }
 
+  const handleRetry = () => {
+    setApiHealthy(null)
+    refetch()
+  }
+
   useEffect(() => {
     if (projects && projects.length > 0) {
       // Redirect to the first project
@@ -99,27 +98,61 @@ export default function HomePage() {
     }
   }, [projects, router])
 
-  if (isLoading) {
+  if (isLoading || apiHealthy === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading projects...</span>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="flex items-center justify-center space-x-2 mb-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="text-lg font-medium">Loading Project Planner...</span>
+          </div>
+          <p className="text-gray-600">
+            {apiHealthy === null ? 'Checking system health...' : 'Loading projects...'}
+          </p>
         </div>
       </div>
     )
   }
 
-  if (error) {
-    console.error('React Query error:', error)
+  if (error || apiHealthy === false) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Projects</h1>
-          <p className="text-gray-600 mb-4">
-            {error instanceof Error ? error.message : 'Unknown error occurred'}
-          </p>
-          <p className="text-sm text-gray-500">Check browser console for details</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+          <div className="flex items-center justify-center mb-4">
+            <AlertCircle className="h-12 w-12 text-red-500" />
+          </div>
+          
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            Connection Error
+          </h1>
+          
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <p className="text-red-800 text-sm font-medium mb-2">
+              Unable to connect to the backend service
+            </p>
+            <p className="text-red-600 text-sm">
+              {error instanceof Error ? error.message : 'Service unavailable'}
+            </p>
+          </div>
+          
+          <div className="space-y-3">
+            <Button onClick={handleRetry} className="w-full">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Try Again
+            </Button>
+            
+            <details className="text-left">
+              <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
+                Troubleshooting Steps
+              </summary>
+              <div className="mt-2 text-xs text-gray-600 space-y-1">
+                <p>• Ensure the backend server is running (port 8000)</p>
+                <p>• Check network connectivity</p>
+                <p>• Verify CORS configuration</p>
+                <p>• Check browser console for detailed errors</p>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
     )

@@ -1,0 +1,37 @@
+{
+  "users": {
+    "user_1": {
+      "id": "user_1",
+      "first_name": "John",
+      "last_name": "Doe",
+      "display_name": "John Doe",
+      "created": "2025-07-25T14:49:13.604762",
+      "last_active": "2025-07-25T14:49:28.617604"
+    },
+    "user_2": {
+      "id": "user_2",
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "display_name": "Jane Smith",
+      "created": "2025-07-25T14:49:21.311148",
+      "last_active": "2025-07-25T14:49:21.311148"
+    },
+    "user_3": {
+      "id": "user_3",
+      "first_name": "Test",
+      "last_name": "User",
+      "display_name": "Test User",
+      "created": "2025-07-25T16:32:40.351477",
+      "last_active": "2025-07-25T16:32:40.351477"
+    },
+    "user_4": {
+      "id": "user_4",
+      "first_name": "Amber",
+      "last_name": "Joneleit",
+      "display_name": "Amber Joneleit",
+      "created": "2025-07-25T16:59:13.477415",
+      "last_active": "2025-07-25T17:19:00.762946"
+    }
+  },
+  "next_id": 5
+}

@@ -5,5 +5,12 @@
     "status": "active",
     "name": "Ambers Project",
     "description": "Amber is making a project"
+  },
+  "ambers-second-proj": {
+    "created": "2025-07-24T11:45:41.270206",
+    "file_path": "ambers-second-proj.md",
+    "status": "active",
+    "name": "ambers second proj",
+    "description": ""
   }
 }

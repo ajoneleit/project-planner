@@ -1,33 +1,114 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useCallback } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Download, Loader2, FileText } from 'lucide-react'
+import { RefreshCw, Download, Loader2, FileText, Clock, Wifi } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { apiRequest } from '@/lib/api'
 
 interface ProjectFile {
   content: string
 }
 
 async function fetchProjectFile(slug: string): Promise<ProjectFile> {
-  const response = await fetch(`http://172.29.56.210:8001/api/projects/${slug}/file`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch project file')
-  }
-  return response.json()
+  return apiRequest<ProjectFile>(`/api/projects/${slug}/file`)
 }
 
 interface MarkdownViewerProps {
   projectSlug: string
+  lastChatUpdate?: number // Timestamp of last chat message for auto-refresh
 }
 
-export function MarkdownViewer({ projectSlug }: MarkdownViewerProps) {
-  const { data, isLoading, error, refetch } = useQuery({
+export function MarkdownViewer({ projectSlug, lastChatUpdate }: MarkdownViewerProps) {
+  const autoRefreshInterval = useRef<NodeJS.Timeout | null>(null)
+  const broadcastChannel = useRef<BroadcastChannel | null>(null)
+  
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['project-file', projectSlug],
     queryFn: () => fetchProjectFile(projectSlug),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: false, // Disable built-in auto-refresh, we'll handle it manually
+    retry: 3,
+    retryDelay: 1000,
+    staleTime: 0, // Always consider data stale to ensure fresh fetches
+    gcTime: 0, // Don't cache to ensure we always get fresh data
   })
+
+  // Manual refresh function that ensures fresh data fetch
+  const handleManualRefresh = useCallback(async () => {
+    try {
+      await refetch()
+    } catch (error) {
+      console.error('Manual refresh failed:', error)
+    }
+  }, [refetch])
+
+  // Auto-refresh setup (30 seconds)
+  useEffect(() => {
+    const startAutoRefresh = () => {
+      if (autoRefreshInterval.current) {
+        clearInterval(autoRefreshInterval.current)
+      }
+      
+      autoRefreshInterval.current = setInterval(() => {
+        refetch()
+      }, 30000) // 30 seconds
+    }
+
+    startAutoRefresh()
+
+    return () => {
+      if (autoRefreshInterval.current) {
+        clearInterval(autoRefreshInterval.current)
+        autoRefreshInterval.current = null
+      }
+    }
+  }, [refetch])
+
+  // Multi-tab sync with BroadcastChannel
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      broadcastChannel.current = new BroadcastChannel(`project-sync-${projectSlug}`)
+      
+      broadcastChannel.current.addEventListener('message', (event) => {
+        if (event.data.type === 'document-updated') {
+          // Another tab detected a document update, refresh immediately
+          refetch()
+        }
+      })
+
+      return () => {
+        if (broadcastChannel.current) {
+          broadcastChannel.current.close()
+          broadcastChannel.current = null
+        }
+      }
+    }
+  }, [projectSlug, refetch])
+
+  // Notify other tabs when we detect a document update
+  useEffect(() => {
+    if (data && broadcastChannel.current) {
+      broadcastChannel.current.postMessage({
+        type: 'document-updated',
+        timestamp: Date.now(),
+        projectSlug
+      })
+    }
+  }, [data, projectSlug])
+
+  // Auto-refresh when chat updates occur (existing functionality)
+  useEffect(() => {
+    if (lastChatUpdate) {
+      // Refresh document 2 seconds after chat update to allow processing
+      const timer = setTimeout(() => {
+        refetch()
+      }, 2000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [lastChatUpdate, refetch])
 
   const handleDownload = () => {
     if (data?.content) {
@@ -46,16 +127,31 @@ export function MarkdownViewer({ projectSlug }: MarkdownViewerProps) {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="flex-shrink-0 p-4 border-b flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <FileText className="h-5 w-5 text-gray-600" />
           <h3 className="font-medium text-gray-900">Project Document</h3>
+          <div className="flex items-center text-xs text-green-600">
+            <Wifi className="h-3 w-3 mr-1" />
+            Auto-sync (30s)
+          </div>
+          {lastChatUpdate && (
+            <div className="flex items-center text-xs text-blue-600">
+              <Clock className="h-3 w-3 mr-1" />
+              Chat-triggered
+            </div>
+          )}
         </div>
         
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleManualRefresh}
+            disabled={isFetching}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+            {isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownload} disabled={!data}>
             <Download className="h-4 w-4 mr-2" />
@@ -64,9 +160,10 @@ export function MarkdownViewer({ projectSlug }: MarkdownViewerProps) {
         </div>
       </div>
 
-      {/* Content */}
-      <ScrollArea className="flex-1">
-        <div className="p-6">
+      {/* Content - Scrollable area with proper height constraints */}
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex items-center space-x-2">
@@ -88,7 +185,7 @@ export function MarkdownViewer({ projectSlug }: MarkdownViewerProps) {
               </Button>
             </div>
           ) : data?.content ? (
-            <div className="prose prose-gray max-w-none">
+            <div className="prose prose-gray max-w-none prose-headings:scroll-mt-4">
               <ReactMarkdown
                 components={{
                   h1: ({ children }) => (
@@ -155,8 +252,9 @@ export function MarkdownViewer({ projectSlug }: MarkdownViewerProps) {
               <p className="text-gray-500">No content available</p>
             </div>
           )}
-        </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      </div>
     </div>
   )
 }

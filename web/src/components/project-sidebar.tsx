@@ -7,9 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Folder, Calendar, Loader2 } from 'lucide-react'
+import { Plus, Folder, Calendar, Loader2, Archive, MoreVertical, Trash2, ArchiveRestore } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { apiRequest, archiveProject, unarchiveProject, deleteProject, fetchArchivedProjects } from '@/lib/api'
 
 interface Project {
   slug: string
@@ -24,27 +28,14 @@ interface CreateProjectData {
 }
 
 async function fetchProjects(): Promise<Project[]> {
-  const response = await fetch('http://172.29.56.210:8001/api/projects')
-  if (!response.ok) {
-    throw new Error('Failed to fetch projects')
-  }
-  return response.json()
+  return apiRequest<Project[]>('/api/projects')
 }
 
 async function createProject(data: CreateProjectData): Promise<{ slug: string; message: string }> {
-  const response = await fetch('http://172.29.56.210:8001/api/projects', {
+  return apiRequest<{ slug: string; message: string }>('/api/projects', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(data),
   })
-  
-  if (!response.ok) {
-    throw new Error('Failed to create project')
-  }
-  
-  return response.json()
 }
 
 interface ProjectSidebarProps {
@@ -58,10 +49,18 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
+  const [activeTab, setActiveTab] = useState('active')
 
-  const { data: projects, isLoading } = useQuery({
+  const { data: projects, isLoading, error } = useQuery({
     queryKey: ['projects'],
     queryFn: fetchProjects,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  })
+
+  const { data: archivedProjects, isLoading: archivedLoading } = useQuery({
+    queryKey: ['projects', 'archived'],
+    queryFn: fetchArchivedProjects,
+    refetchInterval: 30000,
   })
 
   const createProjectMutation = useMutation({
@@ -73,6 +72,42 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
       setNewProjectDescription('')
       router.push(`/p/${data.slug}`)
     },
+    onError: (error) => {
+      console.error('Failed to create project:', error)
+    }
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: archiveProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', 'archived'] })
+    },
+    onError: (error) => {
+      console.error('Failed to archive project:', error)
+    }
+  })
+
+  const unarchiveMutation = useMutation({
+    mutationFn: unarchiveProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', 'archived'] })
+    },
+    onError: (error) => {
+      console.error('Failed to unarchive project:', error)
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', 'archived'] })
+    },
+    onError: (error) => {
+      console.error('Failed to delete project:', error)
+    }
   })
 
   const handleCreateProject = () => {
@@ -90,6 +125,17 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
     } catch {
       return 'Unknown'
     }
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-4 bg-white">
+        <div className="text-center">
+          <p className="text-red-600 font-medium mb-2">Failed to load projects</p>
+          <p className="text-sm text-gray-500">Check your connection and try again</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -148,57 +194,224 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
             </DialogContent>
           </Dialog>
         </div>
+        
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="w-full">
+            <TabsTrigger value="active" className="flex-1">
+              <Folder className="h-4 w-4 mr-2" />
+              Active
+            </TabsTrigger>
+            <TabsTrigger value="archived" className="flex-1">
+              <Archive className="h-4 w-4 mr-2" />
+              Archived
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Projects List */}
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : !projects || projects.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-sm">No projects yet</p>
-              <p className="text-xs">Create your first project to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {projects.map((project) => (
-                <button
-                  key={project.slug}
-                  onClick={() => router.push(`/p/${project.slug}`)}
-                  className={cn(
-                    "w-full text-left p-3 rounded-lg transition-colors",
-                    "hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500",
-                    currentSlug === project.slug ? "bg-blue-50 border border-blue-200" : "border border-transparent"
-                  )}
-                >
-                  <div className="flex items-start space-x-3">
-                    <Folder className={cn(
-                      "h-5 w-5 mt-0.5 flex-shrink-0",
-                      currentSlug === project.slug ? "text-blue-600" : "text-gray-400"
-                    )} />
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        "font-medium text-sm truncate",
-                        currentSlug === project.slug ? "text-blue-900" : "text-gray-900"
-                      )}>
-                        {project.name}
-                      </p>
-                      <div className="flex items-center mt-1">
-                        <Calendar className="h-3 w-3 text-gray-400 mr-1" />
-                        <p className="text-xs text-gray-500">
-                          {formatDate(project.created)}
-                        </p>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsContent value="active">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : !projects || projects.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-sm">No active projects</p>
+                  <p className="text-xs">Create your first project to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {projects.map((project) => (
+                    <div key={project.slug} className="group relative">
+                      <button
+                        onClick={() => router.push(`/p/${project.slug}`)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-lg transition-colors pr-10",
+                          "hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                          currentSlug === project.slug ? "bg-blue-50 border border-blue-200" : "border border-transparent"
+                        )}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <Folder className={cn(
+                            "h-5 w-5 mt-0.5 flex-shrink-0",
+                            currentSlug === project.slug ? "text-blue-600" : "text-gray-400"
+                          )} />
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "font-medium text-sm truncate",
+                              currentSlug === project.slug ? "text-blue-900" : "text-gray-900"
+                            )}>
+                              {project.name}
+                            </p>
+                            <div className="flex items-center mt-1">
+                              <Calendar className="h-3 w-3 text-gray-400 mr-1" />
+                              <p className="text-xs text-gray-500">
+                                {formatDate(project.created)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                      
+                      {/* Actions dropdown */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => archiveMutation.mutate(project.slug)}
+                              disabled={archiveMutation.isPending}
+                            >
+                              <Archive className="h-4 w-4 mr-2" />
+                              Archive
+                            </DropdownMenuItem>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                  <Trash2 className="h-4 w-4 mr-2 text-red-500" />
+                                  <span className="text-red-500">Delete</span>
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete &ldquo;{project.name}&rdquo;? This action cannot be undone and all project data will be permanently lost.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteMutation.mutate(project.slug)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                    disabled={deleteMutation.isPending}
+                                  >
+                                    {deleteMutation.isPending && (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    )}
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+            
+            <TabsContent value="archived">
+              {archivedLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : !archivedProjects || archivedProjects.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Archive className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-sm">No archived projects</p>
+                  <p className="text-xs">Archived projects will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {archivedProjects.map((project) => (
+                    <div key={project.slug} className="group relative">
+                      <button
+                        onClick={() => router.push(`/p/${project.slug}`)}
+                        className="w-full text-left p-3 rounded-lg transition-colors pr-10 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent"
+                      >
+                        <div className="flex items-start space-x-3">
+                          <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-gray-400" />
+                          <div className="flex-1 min-w-0 opacity-75">
+                            <p className="font-medium text-sm truncate text-gray-700">
+                              {project.name}
+                            </p>
+                            <div className="flex items-center mt-1">
+                              <Calendar className="h-3 w-3 text-gray-400 mr-1" />
+                              <p className="text-xs text-gray-500">
+                                {formatDate(project.created)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                      
+                      {/* Actions dropdown */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => unarchiveMutation.mutate(project.slug)}
+                              disabled={unarchiveMutation.isPending}
+                            >
+                              <ArchiveRestore className="h-4 w-4 mr-2" />
+                              Unarchive
+                            </DropdownMenuItem>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                  <Trash2 className="h-4 w-4 mr-2 text-red-500" />
+                                  <span className="text-red-500">Delete</span>
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete &ldquo;{project.name}&rdquo;? This action cannot be undone and all project data will be permanently lost.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteMutation.mutate(project.slug)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                    disabled={deleteMutation.isPending}
+                                  >
+                                    {deleteMutation.isPending && (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    )}
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       </ScrollArea>
     </div>

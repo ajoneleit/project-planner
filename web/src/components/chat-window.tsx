@@ -4,21 +4,24 @@ import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Loader2, User, Bot } from 'lucide-react'
+import { Send, Loader2, User, Bot, FileEdit } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { apiStreamRequest, apiConfig } from '@/lib/api'
 
 interface Message {
   id: string
   content: string
   role: 'user' | 'assistant'
   timestamp: Date
+  hasDocumentUpdate?: boolean
 }
 
 interface ChatWindowProps {
   projectSlug: string
+  onMessageComplete?: () => void // Callback when message is complete
 }
 
-export function ChatWindow({ projectSlug }: ChatWindowProps) {
+export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
@@ -30,10 +33,14 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
+        // Smooth scroll to bottom
+        scrollContainer.scrollTo({
+          top: scrollContainer.scrollHeight,
+          behavior: 'smooth'
+        })
       }
     }
-  }, [messages])
+  }, [messages, isStreaming])
 
   // Focus input on mount
   useEffect(() => {
@@ -55,24 +62,16 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
     setIsStreaming(true)
 
     try {
-      const response = await fetch(`http://172.29.56.210:8001/api/projects/${projectSlug}/chat`, {
+      const stream = await apiStreamRequest(`/api/projects/${projectSlug}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           message: userMessage.content,
           model: 'gpt-4o-mini'
         }),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to send message')
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('No response body')
+      if (!stream) {
+        throw new Error('No response stream received')
       }
 
       // Create assistant message
@@ -81,11 +80,13 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
         content: '',
         role: 'assistant',
         timestamp: new Date(),
+        hasDocumentUpdate: false
       }
 
       setMessages(prev => [...prev, assistantMessage])
 
       // Stream the response
+      const reader = stream.getReader()
       const decoder = new TextDecoder()
       let done = false
 
@@ -109,12 +110,23 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
                       : msg
                   ))
                 } else if (data.done) {
+                  // Check if response indicates document update
+                  const hasUpdate = assistantMessage.content.includes('📝') || 
+                                  assistantMessage.content.includes('updated') ||
+                                  assistantMessage.content.includes('document')
+                  
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessage.id 
+                      ? { ...msg, hasDocumentUpdate: hasUpdate }
+                      : msg
+                  ))
+                  
                   done = true
                   break
                 } else if (data.error) {
                   throw new Error(data.error)
                 }
-              } catch (e) {
+              } catch {
                 // Skip malformed JSON
                 continue
               }
@@ -122,13 +134,19 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
           }
         }
       }
+
+      // Notify parent component that message is complete
+      if (onMessageComplete) {
+        onMessageComplete()
+      }
+
     } catch (error) {
       console.error('Chat error:', error)
       
       // Add error message
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
-        content: 'Sorry, there was an error processing your message. Please try again.',
+        content: `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
         role: 'assistant',
         timestamp: new Date(),
       }
@@ -146,6 +164,7 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
     }
   }
 
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
@@ -153,24 +172,26 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Chat Header */}
-      <div className="p-4 border-b">
+      <div className="flex-shrink-0 p-4 border-b">
         <h3 className="font-medium text-gray-900">Project Chat</h3>
-        <p className="text-sm text-gray-500">Ask questions or request changes to your project</p>
+        <p className="text-sm text-gray-500">Ask questions or request changes - I&apos;ll update your document automatically</p>
       </div>
 
-      {/* Messages */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages.length === 0 ? (
-            <div className="text-center py-8">
-              <Bot className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-500 mb-2">Start a conversation</p>
-              <p className="text-sm text-gray-400">
-                Ask me anything about your project or request modifications
-              </p>
-            </div>
-          ) : (
-            messages.map((message) => (
+      {/* Messages - Scrollable area with proper height constraints */}
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea ref={scrollAreaRef} className="h-full">
+          <div className="p-4">
+            <div className="space-y-4 min-h-full">
+              {messages.length === 0 ? (
+                <div className="text-center py-8">
+                  <Bot className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-500 mb-2">Start a conversation</p>
+                  <p className="text-sm text-gray-400">
+                    I can answer questions and automatically update your project document
+                  </p>
+                </div>
+              ) : (
+                messages.map((message) => (
               <div
                 key={message.id}
                 className={cn(
@@ -193,14 +214,22 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
                   )}
                 >
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  <p
-                    className={cn(
-                      "text-xs mt-1",
-                      message.role === 'user' ? "text-blue-100" : "text-gray-500"
+                  <div className="flex items-center justify-between mt-1">
+                    <p
+                      className={cn(
+                        "text-xs",
+                        message.role === 'user' ? "text-blue-100" : "text-gray-500"
+                      )}
+                    >
+                      {formatTime(message.timestamp)}
+                    </p>
+                    {message.hasDocumentUpdate && (
+                      <div className="flex items-center text-xs text-green-600">
+                        <FileEdit className="h-3 w-3 mr-1" />
+                        Doc Updated
+                      </div>
                     )}
-                  >
-                    {formatTime(message.timestamp)}
-                  </p>
+                  </div>
                 </div>
 
                 {message.role === 'user' && (
@@ -208,35 +237,37 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
                     <User className="h-4 w-4 text-gray-600" />
                   </div>
                 )}
-              </div>
-            ))
-          )}
-          
-          {isStreaming && (
-            <div className="flex items-start space-x-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <Bot className="h-4 w-4 text-blue-600" />
-              </div>
-              <div className="bg-gray-100 rounded-lg p-3">
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-gray-500">Thinking...</span>
+                  </div>
+                ))
+              )}
+              
+              {isStreaming && (
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="bg-gray-100 rounded-lg p-3">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm text-gray-500">Thinking and updating document...</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
-          )}
-        </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      </div>
 
-      {/* Input */}
-      <div className="p-4 border-t">
+      {/* Fixed Input Bar */}
+      <div className="flex-shrink-0 p-4 border-t bg-white shadow-lg">
         <div className="flex space-x-2">
           <Input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask a question or request changes..."
+            placeholder="Ask a question or describe what you want to add to your project..."
             disabled={isStreaming}
             className="flex-1"
           />
@@ -251,6 +282,14 @@ export function ChatWindow({ projectSlug }: ChatWindowProps) {
               <Send className="h-4 w-4" />
             )}
           </Button>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          💡 Try: &quot;Add a task to integrate with Slack&quot; or &quot;What are the main risks for this project?&quot;
+        </p>
+        
+        {/* Connection status */}
+        <div className="mt-2 text-xs text-gray-500">
+          Connected to: {apiConfig.baseUrl}
         </div>
       </div>
     </div>

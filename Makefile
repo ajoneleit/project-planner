@@ -1,8 +1,10 @@
-.PHONY: help dev test build docker docker-test docker-run clean install-deps install-pip dev-observability obs-up obs-down obs-logs obs-health
+.PHONY: help dev frontend backend test build docker docker-test docker-run clean install-deps install-pip dev-observability obs-up obs-down obs-logs obs-health
 
 help:
 	@echo "Available commands:"
-	@echo "  dev          - Start development server"
+	@echo "  dev          - Instructions for full development stack"
+	@echo "  frontend     - Start frontend development server (port 3000)"
+	@echo "  backend      - Start backend development server (port 8000)"
 	@echo "  test         - Run all tests"
 	@echo "  build        - Build frontend and prepare for deployment"
 	@echo "  docker       - Build Docker image"
@@ -27,8 +29,23 @@ install-pip:
 	pip install -r requirements.txt
 	cd web && npm install
 
-dev:
+# Start frontend development server
+frontend:
+	cd web && npm run dev
+
+# Start backend development server  
+backend:
 	export PATH="$$HOME/.local/bin:$$PATH" && poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Start full development stack (requires tmux or run in separate terminals)
+dev:
+	@echo "Starting development servers..."
+	@echo "Backend: http://localhost:8000"
+	@echo "Frontend: http://localhost:3000"
+	@echo ""
+	@echo "Run these commands in separate terminals:"
+	@echo "  make backend"
+	@echo "  make frontend"
 
 test:
 	export PATH="$$HOME/.local/bin:$$PATH" && poetry run pytest tests/ -v
