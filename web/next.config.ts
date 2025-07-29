@@ -1,13 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Removed static export for now - will serve via FastAPI
-  // output: "export",
-  // trailingSlash: true,
+  // Use standalone output for production deployment
+  output: "standalone",
   images: {
     unoptimized: true,
   },
-  // Removed rewrites - using direct backend calls instead
 };
 
 export default nextConfig;

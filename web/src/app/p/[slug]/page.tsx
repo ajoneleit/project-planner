@@ -2,8 +2,11 @@ import ProjectPageClient from './project-page-client'
 
 // This function is required for static export with dynamic routes
 export async function generateStaticParams() {
-  // Return empty array for now - pages will be generated on demand
-  return []
+  // For static export, we'll generate a demo page
+  // In practice, users will navigate to project pages dynamically
+  return [
+    { slug: 'demo' }
+  ]
 }
 
 interface ProjectPageProps {

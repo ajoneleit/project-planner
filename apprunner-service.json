@@ -1,0 +1,26 @@
+{
+    "ServiceName": "planner-bot-service",
+    "SourceConfiguration": {
+      "ImageRepository": {
+        "ImageIdentifier": "348204830428.dkr.ecr.us-east-1.amazonaws.com/planner-bot:latest",
+        "ImageConfiguration": {
+          "Port": "8000"
+        },
+        "ImageRepositoryType": "ECR"
+      },
+      "AutoDeploymentsEnabled": true
+    },
+    "InstanceConfiguration": {
+      "Cpu": "0.25 vCPU",
+      "Memory": "0.5 GB"
+    },
+    "HealthCheckConfiguration": {
+      "Protocol": "HTTP",
+      "Path": "/health",
+      "Interval": 20,
+      "Timeout": 5,
+      "HealthyThreshold": 3,
+      "UnhealthyThreshold": 3
+    }
+  }
+  

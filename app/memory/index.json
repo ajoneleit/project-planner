@@ -1,16 +1,16 @@
 {
   "ambers-project": {
-    "created": "2025-07-24T10:06:14.462359",
+    "created": "2025-07-28T11:40:44.212933",
     "file_path": "ambers-project.md",
     "status": "active",
     "name": "Ambers Project",
-    "description": "Amber is making a project"
+    "description": ""
   },
-  "ambers-second-proj": {
-    "created": "2025-07-24T11:45:41.270206",
-    "file_path": "ambers-second-proj.md",
+  "project": {
+    "created": "2025-07-28T11:45:51.521369",
+    "file_path": "project.md",
     "status": "active",
-    "name": "ambers second proj",
+    "name": "Project",
     "description": ""
   }
 }

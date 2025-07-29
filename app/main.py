@@ -129,12 +129,9 @@ class UserResponse(BaseModel):
     created: str
     last_active: str
 
-# Mount static files (Next.js build output)
-web_path = Path(__file__).parent.parent / "web"
-if web_path.exists():
-    # This is a simplified approach - in production you'd use a proper Next.js server
-    # For now, serve the static files that don't require server-side rendering
-    pass
+@app.get("/")
+async def root():
+    return {"message": "Project Planner Bot API", "docs": "/docs", "health": "/health"}
 
 @app.get("/health")
 async def health_check():
@@ -336,6 +333,38 @@ async def chat_with_project(slug: str, request: ChatRequest):
         raise
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/projects/{slug}/initial-message")
+async def get_initial_message(slug: str, user_id: str = "anonymous"):
+    """Get initial message for a project based on user state."""
+    
+    try:
+        from .langgraph_runner import ProjectRegistry, stream_initial_message
+        
+        logger.info(f"Initial message request for project {slug} by user {user_id}")
+        
+        # Verify project exists
+        projects = await ProjectRegistry.list_projects()
+        if slug not in projects:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Stream the initial message
+        return StreamingResponse(
+            stream_initial_message(slug, user_id),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+                "Access-Control-Allow-Origin": "*",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in initial message endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/projects/{slug}/file")

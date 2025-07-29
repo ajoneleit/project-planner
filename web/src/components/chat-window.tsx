@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Loader2, User, Bot, FileEdit } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiStreamRequest, apiConfig } from '@/lib/api'
+import { useCurrentUserId } from '@/contexts/UserContext'
 
 interface Message {
   id: string
@@ -27,6 +28,7 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
   const [isStreaming, setIsStreaming] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const userId = useCurrentUserId()
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -42,10 +44,82 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
     }
   }, [messages, isStreaming])
 
-  // Focus input on mount
+  // Focus input on mount and fetch initial message
   useEffect(() => {
     inputRef.current?.focus()
-  }, [])
+    
+    // Fetch initial message automatically
+    const fetchInitialMessage = async () => {
+      if (messages.length > 0) return // Don't fetch if we already have messages
+      
+      try {
+        setIsStreaming(true)
+        
+        // Use user ID from context
+        
+        const stream = await apiStreamRequest(`/api/projects/${projectSlug}/initial-message?user_id=${userId}`, {
+          method: 'GET',
+        })
+
+        if (!stream) {
+          return // No initial message needed
+        }
+
+        // Create assistant message for initial message
+        const assistantMessage: Message = {
+          id: Date.now().toString(),
+          content: '',
+          role: 'assistant',
+          timestamp: new Date(),
+          hasDocumentUpdate: false
+        }
+
+        setMessages([assistantMessage])
+
+        // Stream the initial message
+        const reader = stream.getReader()
+        const decoder = new TextDecoder()
+        let done = false
+
+        while (!done) {
+          const { value, done: streamDone } = await reader.read()
+          done = streamDone
+
+          if (value) {
+            const chunk = decoder.decode(value)
+            const lines = chunk.split('\n')
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6))
+                  
+                  if (data.token) {
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === assistantMessage.id 
+                        ? { ...msg, content: msg.content + data.token }
+                        : msg
+                    ))
+                  } else if (data.done) {
+                    done = true
+                    break
+                  }
+                } catch {
+                  continue
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching initial message:', error)
+      } finally {
+        setIsStreaming(false)
+      }
+    }
+    
+    fetchInitialMessage()
+  }, [projectSlug, userId]) // Re-run when project or user changes
 
   const handleSendMessage = async () => {
     if (!input.trim() || isStreaming) return

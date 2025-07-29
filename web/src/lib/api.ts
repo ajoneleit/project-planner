@@ -41,6 +41,11 @@ function detectEnvironment(): 'development' | 'production' | 'static' {
 }
 
 function getApiBaseUrl(): string {
+  // Check for explicit API URL override first
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+  
   // Handle SSR - return default URL for server-side rendering
   if (typeof window === 'undefined') {
     return 'http://localhost:8000'
@@ -102,13 +107,13 @@ export async function apiRequest<T>(
     }
   }
   
-  // Try different ports in development if initial request fails
+  // Try AWS URL first, then fallback to local ports in development
   const env = detectEnvironment()
   const hostsToTry = env === 'development' && typeof window !== 'undefined' ? [
+    apiConfig.baseUrl, // AWS URL first
     `${window.location.protocol}//${window.location.hostname}:8000`,
     `${window.location.protocol}//${window.location.hostname}:8001`,
-    `${window.location.protocol}//${window.location.hostname}:5000`,
-    apiConfig.baseUrl
+    `${window.location.protocol}//${window.location.hostname}:5000`
   ].filter((v, i, a) => a.indexOf(v) === i) : [apiConfig.baseUrl] // Remove duplicates
   
   for (const baseUrl of hostsToTry) {

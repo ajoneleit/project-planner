@@ -110,7 +110,7 @@ Project documentation is being developed through conversation with the AI assist
 ## Glossary
 
 | Term | Definition | Added by |
-|------|------------|----------|
+
 
 ---
 
@@ -122,7 +122,6 @@ Project documentation is being developed through conversation with the AI assist
 ## Stakeholders & Collaborators
 
 | Role / Name | Responsibilities |
-|-------------|------------------|
 
 ---
 
@@ -134,19 +133,21 @@ Project documentation is being developed through conversation with the AI assist
 ## Attachments & Examples
 
 | Item | Type | Location | Notes |
-|------|------|----------|-------|
+
 
 ---
 
 ## Open Questions & Conflicts
 
 | Question/Conflict | Owner | Priority | Status |
-|-------------------|-------|----------|--------|
+
 
 ---
 
 ## Next Actions
-*Immediate next steps with owners and due dates*
+
+| When | Action | Why it matters | Owner |
+
 
 ---
 
@@ -158,7 +159,6 @@ Project documentation is being developed through conversation with the AI assist
 ## Change Log
 
 | Date | Contributor | User ID | Summary |
-|------|-------------|---------|---------|
 | {current_time} | System | system | Initial structured project document created |
 
 """
@@ -241,7 +241,7 @@ Project documentation is being developed through conversation with the AI assist
         if re.search(change_log_pattern, content, re.DOTALL):
             content = re.sub(
                 change_log_pattern,
-                rf'\1{change_entry}\n',
+                rf'\1{change_entry}\n\n',
                 content,
                 flags=re.DOTALL
             )
@@ -445,7 +445,7 @@ def extract_stakeholder_info(text: str) -> str:
     # Add header if we have data
     if lines:
         header = "| Role / Name | Responsibilities |\n|-------------|------------------|"
-        return header + "\n" + "\n".join(lines)
+        return header + "\n" + "\n\n".join(lines)
     
     return ""
 
@@ -582,7 +582,7 @@ def extract_glossary_info(text: str) -> str:
     # Add header if we have terms
     if terms:
         header = "| Term | Definition | Added by |\n|------|------------|----------|"
-        return header + "\n" + "\n".join(terms)
+        return header + "\n" + "\n\n".join(terms)
     
     return ""
 
@@ -778,6 +778,27 @@ class ProjectRegistry:
         index = await ProjectRegistry.load_index()
         return {slug: data for slug, data in index.items() if data.get("status", "active") == status}
 
+def should_start_introduction(user_id: str, document_context: str) -> bool:
+    """Determine if we should start the introduction flow based on user and project state."""
+    
+    # Always start introduction for anonymous users
+    if user_id == "anonymous":
+        return True
+    
+    # Check if user's name appears in the change log (indicating they've contributed before)
+    change_log_section = document_context.split('## Change Log')[-1] if '## Change Log' in document_context else ""
+    
+    # Look for user ID or name patterns in change log
+    user_in_changelog = (f"| {user_id} |" in change_log_section or 
+                        f"by {user_id}:" in change_log_section or
+                        user_id in change_log_section)
+    
+    # If user hasn't contributed to this project before, start introduction
+    if not user_in_changelog:
+        return True
+        
+    return False
+
 def make_graph(project_slug: str, model: str = "gpt-4o-mini") -> StateGraph:
     """Create an intelligent LangGraph workflow that prioritizes response generation."""
     
@@ -827,8 +848,44 @@ Always respond to the user in a helpful, professional manner. Focus on understan
             # Load system prompt
             system_prompt = await load_system_prompt()
             
-            # Build context that includes the ACTUAL document content
-            context_prompt = f"""{system_prompt}
+            # Get user_id from state or default to anonymous
+            user_id = state.get("user_id", "anonymous")
+            
+            # Check if we should start with introduction workflow
+            needs_introduction = should_start_introduction(user_id, document_context)
+            
+            # Build context that includes the ACTUAL document content and appropriate workflow
+            if needs_introduction:
+                project_title = project_slug.replace('-', ' ').title()
+                context_prompt = f"""{system_prompt}
+
+CURRENT USER STATE: NEW USER TO PROJECT
+This user is either anonymous or hasn't contributed to this project before. Follow the NEW PROJECT WORKFLOW:
+
+AUTOMATIC INTRODUCTION: Start immediately with this introduction message:
+"This assistant will guide you through a structured questionnaire to build a shared problem definition for \"{project_title}.\" You can pause anytime and resume later.
+
+To get started, could you please provide your name, role, and areas of expertise? Additionally, if you have a specific project handle in mind, please share that as well."
+
+After they respond, use Five-Question Cadence (4-5 questions per bundle) to build comprehensive foundation.
+Track progress and guide toward completeness ("Depth X/8 achieved").
+Only reveal full document when depth ≥ 4/8 or explicitly requested.
+
+CURRENT DOCUMENT STATE:
+{document_context}
+
+IMPORTANT: Do not wait for user input - start with the introduction message immediately."""
+
+            else:
+                context_prompt = f"""{system_prompt}
+
+CURRENT USER STATE: RETURNING COLLABORATOR
+This user has contributed to this project before. Follow the EXISTING PROJECT WORKFLOW:
+
+1. Provide recap of current project state (≤5 bullets: objective, status, open questions, risks, next actions)
+2. Ask about user's role and familiarity with the project
+3. Focus on enhancing existing content based on user expertise
+4. Address gaps and open questions in their domain
 
 CURRENT PROJECT DOCUMENT:
 {document_context}
@@ -840,7 +897,7 @@ Use this information to:
 3. Reference specific details that are already captured
 4. Help complete missing sections
 
-Respond naturally to the user's input while being aware of all the project details already documented."""
+The user can see this same document. Reference specific existing details and build upon the established foundation."""
             
             messages = [SystemMessage(content=context_prompt)] + state["messages"]
             
@@ -884,6 +941,54 @@ Respond naturally to the user's input while being aware of all the project detai
     workflow.add_edge("planner", END)
     
     return workflow.compile()
+
+async def stream_initial_message(
+    project_slug: str,
+    user_id: str = "anonymous"
+) -> AsyncGenerator[str, None]:
+    """Stream an initial message for users who need introduction workflow."""
+    
+    try:
+        logger.info(f"Starting initial message stream for {project_slug} by user {user_id}")
+        
+        # Get document context to check user state
+        memory = MarkdownMemory(project_slug)
+        document_context = await memory.get_document_context()
+        
+        # Check if user needs introduction
+        needs_introduction = should_start_introduction(user_id, document_context)
+        
+        if needs_introduction:
+            project_title = project_slug.replace('-', ' ').title()
+            introduction_message = f"""This assistant will guide you through a structured questionnaire to build a shared problem definition for "{project_title}." You can pause anytime and resume later.
+
+To get started, could you please provide your name, role, and areas of expertise? Additionally, if you have a specific project handle in mind, please share that as well."""
+            
+            # Stream the introduction message token by token
+            for token in introduction_message:
+                yield f"data: {json.dumps({'token': token})}\n\n"
+                await asyncio.sleep(0.01)  # Small delay for smoother streaming
+        else:
+            # For returning users, provide a brief welcome
+            welcome_message = f"Welcome back to {project_slug.replace('-', ' ').title()}! How can I help you continue developing this project?"
+            
+            for token in welcome_message:
+                yield f"data: {json.dumps({'token': token})}\n\n"
+                await asyncio.sleep(0.01)
+        
+        # End the stream
+        yield f"data: {json.dumps({'done': True})}\n\n"
+        
+        logger.info(f"Completed initial message stream for {project_slug}")
+        
+    except Exception as e:
+        logger.error(f"Error in stream_initial_message: {e}", exc_info=True)
+        # Always provide some response to the user
+        error_message = "Welcome! I'm here to help you develop your project. Please tell me about what you'd like to work on."
+        for token in error_message:
+            yield f"data: {json.dumps({'token': token})}\n\n"
+            await asyncio.sleep(0.01)
+        yield f"data: {json.dumps({'done': True})}\n\n"
 
 async def stream_chat_response(
     project_slug: str, 

@@ -6,9 +6,31 @@ WORKDIR /app
 COPY web/package*.json ./web/
 RUN npm --prefix web ci
 
-# Copy source and build
+# Copy source and build with production API URL
 COPY web ./web
+ENV NEXT_PUBLIC_API_URL=https://fbm26vyfbw.us-east-1.awsapprunner.com
 RUN npm --prefix web run build
+
+# ---------- Frontend Server Stage ----------
+FROM node:20-alpine AS frontend
+WORKDIR /app
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy built application
+COPY --from=web /app/web/.next/standalone ./
+COPY --from=web /app/web/.next/static ./.next/static
+COPY --from=web /app/web/public ./public
+
+# Fix permissions for nextjs user
+RUN chown -R nextjs:nodejs /app
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV NEXT_PUBLIC_API_URL=https://fbm26vyfbw.us-east-1.awsapprunner.com
+CMD ["node", "server.js"]
 
 # ---------- Backend Build Stage ----------
 FROM python:3.11-slim AS api
@@ -33,11 +55,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app ./app
 COPY prompts ./prompts
-
-# Copy static files from frontend build
-COPY --from=web /app/web/.next ./web/.next
-COPY --from=web /app/web/public ./web/public
-COPY --from=web /app/web/package.json ./web/package.json
 
 # Create necessary directories and set permissions
 RUN mkdir -p app/memory \
