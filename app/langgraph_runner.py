@@ -593,8 +593,25 @@ async def extract_project_updates_with_llm(user_input: str, ai_response: str, pr
         from langchain_core.messages import HumanMessage, SystemMessage
         import json
         
+        # Parse OpenAI API key - handle AWS App Runner Secrets Manager format
+        def get_openai_api_key():
+            api_key = os.getenv("OPENAI_API_KEY", "")
+            if not api_key:
+                return ""
+            
+            # If key looks like JSON (AWS App Runner sometimes wraps secrets in JSON)
+            if api_key.startswith("{") and api_key.endswith("}"):
+                try:
+                    secrets = json.loads(api_key)
+                    return secrets.get("OPENAI_API_KEY", api_key)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse JSON API key format: {api_key[:20]}...")
+                    return api_key
+            
+            return api_key
+        
         # Initialize a lightweight LLM for extraction
-        extraction_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+        extraction_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, api_key=get_openai_api_key())
         
         extraction_prompt = f"""You are a project documentation assistant. Analyze the conversation and identify what document sections should be updated.
 
@@ -802,11 +819,29 @@ def should_start_introduction(user_id: str, document_context: str) -> bool:
 def make_graph(project_slug: str, model: str = "gpt-4o-mini") -> StateGraph:
     """Create an intelligent LangGraph workflow that prioritizes response generation."""
     
+    # Parse OpenAI API key - handle AWS App Runner Secrets Manager format
+    def get_openai_api_key():
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if not api_key:
+            return ""
+        
+        # If key looks like JSON (AWS App Runner sometimes wraps secrets in JSON)
+        if api_key.startswith("{") and api_key.endswith("}"):
+            try:
+                secrets = json.loads(api_key)
+                return secrets.get("OPENAI_API_KEY", api_key)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse JSON API key format: {api_key[:20]}...")
+                return api_key
+        
+        return api_key
+    
     # Initialize the LLM
     llm = ChatOpenAI(
         model=model,
         temperature=0.1,
-        streaming=True
+        streaming=True,
+        api_key=get_openai_api_key()
     )
     
     # Initialize memory

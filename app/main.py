@@ -22,46 +22,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# AWS Secrets Manager integration
-def load_aws_secrets():
-    """Load secrets from AWS Secrets Manager if running in production."""
-    if os.getenv("ENVIRONMENT") == "production":
-        try:
-            import boto3
-            from botocore.exceptions import ClientError
-            
-            secret_name = "planner/env-vars"
-            region_name = "us-east-1"
-            
-            # Create a Secrets Manager client
-            session = boto3.session.Session()
-            client = session.client(
-                service_name='secretsmanager',
-                region_name=region_name
-            )
-            
-            get_secret_value_response = client.get_secret_value(
-                SecretId=secret_name
-            )
-            
-            secret = json.loads(get_secret_value_response['SecretString'])
-            
-            # Set environment variables from secrets
-            for key, value in secret.items():
-                os.environ[key] = value
-                
-            logger.info("Successfully loaded secrets from AWS Secrets Manager")
-            
-        except ClientError as e:
-            logger.error(f"Failed to retrieve secret: {e}")
-        except ImportError:
-            logger.warning("boto3 not available - skipping AWS secrets")
-        except Exception as e:
-            logger.error(f"Error loading AWS secrets: {e}")
-
-# Load AWS secrets before initializing the app
-load_aws_secrets()
-
 # Configure logging with structured format
 logging.basicConfig(
     level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')),
@@ -75,25 +35,48 @@ app = FastAPI(
     description="AI-powered project planning with markdown memory"
 )
 
-# Dynamic CORS configuration
+# Enhanced CORS configuration
 def get_cors_origins():
-    """Get CORS origins based on environment."""
+    """Get CORS origins based on environment with proper security."""
     env = os.getenv("ENVIRONMENT", "development")
     
     if env == "production":
-        # In production, only allow same origin (served by FastAPI)
-        return ["*"]  # Will be restricted by App Runner
+        # Production: Only allow same-origin and specific production domains
+        production_origins = []
+        
+        # Add App Runner domain if available
+        app_runner_domain = os.getenv("PRODUCTION_DOMAIN")
+        if app_runner_domain:
+            production_origins.append(f"https://{app_runner_domain}")
+        
+        # Add custom production domains from environment
+        custom_domains = os.getenv("CORS_PRODUCTION_ORIGINS", "")
+        if custom_domains:
+            production_origins.extend(custom_domains.split(","))
+        
+        # If no specific domains configured, allow same-origin only
+        if not production_origins:
+            # This is secure for same-origin requests when frontend is served by FastAPI
+            return ["*"]
+        
+        logger.info(f"Production CORS origins: {production_origins}")
+        return production_origins
     else:
-        # Development: allow common Next.js dev server ports and local IPs
+        # Development: Allow comprehensive localhost and local network access
         origins = [
+            # Standard development ports
             "http://localhost:3000",
-            "http://localhost:3001", 
+            "http://localhost:3001",
+            "http://localhost:8000",
+            "http://localhost:8001",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
+            "http://127.0.0.1:8000",
+            "http://127.0.0.1:8001",
         ]
         
-        # Add any custom origins from environment
-        custom_origins = os.getenv("CORS_ORIGINS", "")
+        # Add custom development origins from environment
+        custom_origins = os.getenv("CORS_DEVELOPMENT_ORIGINS", "")
         if custom_origins:
             origins.extend(custom_origins.split(","))
         
@@ -101,26 +84,106 @@ def get_cors_origins():
         try:
             hostname = socket.gethostname()
             local_ip = socket.gethostbyname(hostname)
-            origins.extend([
-                f"http://{local_ip}:3000",
-                f"http://{local_ip}:3001",
-            ])
-        except:
-            pass  # Ignore network detection errors
-            
-        return origins
+            for port in [3000, 3001, 8000, 8001]:
+                origins.extend([
+                    f"http://{local_ip}:{port}",
+                ])
+        except Exception as e:
+            logger.debug(f"Could not detect local IP for CORS: {e}")
+        
+        # Remove duplicates while preserving order
+        unique_origins = []
+        for origin in origins:
+            if origin not in unique_origins:
+                unique_origins.append(origin)
+        
+        return unique_origins
 
-# Configure CORS with dynamic origins
+def get_cors_headers():
+    """Get allowed headers for CORS."""
+    return [
+        # Standard headers
+        "Accept",
+        "Accept-Language",
+        "Content-Language",
+        "Content-Type",
+        
+        # Authentication headers
+        "Authorization",
+        "X-Requested-With",
+        
+        # Custom headers that might be used
+        "X-CSRFToken",
+        "X-User-ID",
+        
+        # Origin header for CORS
+        "Origin",
+        
+        # Headers for SSE streaming
+        "Cache-Control",
+        "Connection",
+    ]
+
+def get_exposed_headers():
+    """Get headers to expose to the client."""
+    return [
+        "Content-Length",
+        "Content-Type",
+        "Cache-Control",
+        "Connection",
+        "X-Request-ID",
+    ]
+
+def get_sse_headers(request: Request = None):
+    """Get headers for Server-Sent Events (SSE) streaming with proper CORS."""
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Content-Type": "text/event-stream",
+        "X-Accel-Buffering": "no",  # Disable nginx buffering
+    }
+    
+    # Add CORS headers for streaming
+    if request:
+        origin = request.headers.get("origin")
+        if origin:
+            # Check if origin is allowed
+            allowed_origins = get_cors_origins()
+            if "*" in allowed_origins or origin in allowed_origins:
+                headers["Access-Control-Allow-Origin"] = origin
+            else:
+                headers["Access-Control-Allow-Origin"] = "*"
+        else:
+            headers["Access-Control-Allow-Origin"] = "*"
+    else:
+        headers["Access-Control-Allow-Origin"] = "*"
+    
+    # Additional CORS headers for streaming
+    headers.update({
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Access-Control-Expose-Headers": "Content-Type, Cache-Control, Connection",
+    })
+    
+    return headers
+
+# Configure CORS with enhanced security and development support
 cors_origins = get_cors_origins()
+cors_headers = get_cors_headers()
+exposed_headers = get_exposed_headers()
+
 logger.info(f"CORS origins configured: {cors_origins}")
+logger.info(f"CORS headers allowed: {cors_headers}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=cors_headers,
+    expose_headers=exposed_headers,
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
 # Request logging middleware
@@ -189,18 +252,46 @@ async def health_check():
         "timestamp": time.time()
     }
 
-# CORS preflight handler
+# Enhanced CORS preflight handler
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):
-    """Handle CORS preflight requests."""
+    """Handle CORS preflight requests with proper security."""
+    
+    # Get the requesting origin
+    origin = request.headers.get("origin", "")
+    allowed_origins = get_cors_origins()
+    
+    # Determine if origin is allowed
+    if "*" in allowed_origins:
+        allow_origin = origin if origin else "*"
+    elif origin in allowed_origins:
+        allow_origin = origin
+    else:
+        # Origin not allowed, but respond to avoid CORS errors
+        allow_origin = "null"
+    
+    # Enhanced preflight response headers
+    headers = {
+        "Access-Control-Allow-Origin": allow_origin,
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
+        "Access-Control-Allow-Headers": ", ".join(get_cors_headers()),
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400",  # 24 hours
+        "Access-Control-Expose-Headers": ", ".join(get_exposed_headers()),
+        "Vary": "Origin",  # Important for caching
+    }
+    
+    # Add specific headers for SSE endpoints
+    if "/chat" in full_path or "initial-message" in full_path:
+        headers.update({
+            "Access-Control-Allow-Headers": headers["Access-Control-Allow-Headers"] + ", Cache-Control, Connection",
+        })
+    
+    logger.debug(f"CORS preflight for {full_path} from origin {origin}")
+    
     return Response(
         status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "86400",
-        }
+        headers=headers
     )
 
 # User Management Endpoints
@@ -344,7 +435,7 @@ async def list_projects():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/projects/{slug}/chat")
-async def chat_with_project(slug: str, request: ChatRequest):
+async def chat_with_project(slug: str, request: ChatRequest, http_request: Request):
     """Stream chat responses for a specific project."""
     
     try:
@@ -357,16 +448,11 @@ async def chat_with_project(slug: str, request: ChatRequest):
         if slug not in projects:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        # Stream the response
+        # Stream the response with proper CORS headers
         return StreamingResponse(
             stream_chat_response(slug, request.message, request.model, request.user_id),
-            media_type="text/plain",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Content-Type": "text/event-stream",
-                "Access-Control-Allow-Origin": "*",
-            }
+            media_type="text/event-stream",
+            headers=get_sse_headers(http_request)
         )
         
     except HTTPException:
@@ -376,7 +462,7 @@ async def chat_with_project(slug: str, request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/projects/{slug}/initial-message")
-async def get_initial_message(slug: str, user_id: str = "anonymous"):
+async def get_initial_message(slug: str, user_id: str = "anonymous", http_request: Request = None):
     """Get initial message for a project based on user state."""
     
     try:
@@ -389,16 +475,11 @@ async def get_initial_message(slug: str, user_id: str = "anonymous"):
         if slug not in projects:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        # Stream the initial message
+        # Stream the initial message with proper CORS headers
         return StreamingResponse(
             stream_initial_message(slug, user_id),
-            media_type="text/plain",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Content-Type": "text/event-stream",
-                "Access-Control-Allow-Origin": "*",
-            }
+            media_type="text/event-stream",
+            headers=get_sse_headers(http_request)
         )
         
     except HTTPException:
