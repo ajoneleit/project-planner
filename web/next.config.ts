@@ -1,11 +1,9 @@
+// next.config.ts or next.config.js
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Use standalone output for production deployment
-  output: "standalone",
-  images: {
-    unoptimized: true,
-  },
+  // Remove: output: "standalone",
+  images: { unoptimized: true }, // fine to keep
 };
 
 export default nextConfig;
