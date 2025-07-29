@@ -22,6 +22,46 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# AWS Secrets Manager integration
+def load_aws_secrets():
+    """Load secrets from AWS Secrets Manager if running in production."""
+    if os.getenv("ENVIRONMENT") == "production":
+        try:
+            import boto3
+            from botocore.exceptions import ClientError
+            
+            secret_name = "planner/env-vars"
+            region_name = "us-east-1"
+            
+            # Create a Secrets Manager client
+            session = boto3.session.Session()
+            client = session.client(
+                service_name='secretsmanager',
+                region_name=region_name
+            )
+            
+            get_secret_value_response = client.get_secret_value(
+                SecretId=secret_name
+            )
+            
+            secret = json.loads(get_secret_value_response['SecretString'])
+            
+            # Set environment variables from secrets
+            for key, value in secret.items():
+                os.environ[key] = value
+                
+            logger.info("Successfully loaded secrets from AWS Secrets Manager")
+            
+        except ClientError as e:
+            logger.error(f"Failed to retrieve secret: {e}")
+        except ImportError:
+            logger.warning("boto3 not available - skipping AWS secrets")
+        except Exception as e:
+            logger.error(f"Error loading AWS secrets: {e}")
+
+# Load AWS secrets before initializing the app
+load_aws_secrets()
+
 # Configure logging with structured format
 logging.basicConfig(
     level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')),
