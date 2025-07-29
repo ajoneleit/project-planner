@@ -1,4 +1,4 @@
-.PHONY: help dev frontend backend test build docker docker-test docker-run clean install-deps install-pip dev-observability obs-up obs-down obs-logs obs-health
+.PHONY: help dev frontend backend test build docker docker-test docker-run clean install-deps install-pip dev-observability obs-up obs-down obs-logs obs-health deploy deploy-dry-run
 
 help:
 	@echo "Available commands:"
@@ -13,6 +13,10 @@ help:
 	@echo "  clean        - Clean build artifacts"
 	@echo "  install-deps - Install all dependencies (Poetry)"
 	@echo "  install-pip  - Install dependencies using pip"
+	@echo ""
+	@echo "Deployment commands:"
+	@echo "  deploy       - Deploy backend to AWS App Runner"
+	@echo "  deploy-dry-run - Preview deployment without executing"
 	@echo ""
 	@echo "Observability commands:"
 	@echo "  dev-observability - Start with full observability stack"
@@ -115,3 +119,12 @@ clean:
 	find . -type d -name __pycache__ -delete
 	find . -name "*.pyc" -delete
 	docker-compose down --volumes --remove-orphans
+
+# Deployment commands
+deploy: 
+	@echo "🚀 Deploying backend to AWS App Runner..."
+	./deploy-backend.sh
+
+deploy-dry-run:
+	@echo "🔍 Preview deployment (dry run)..."
+	./deploy-backend.sh --dry-run

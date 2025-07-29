@@ -267,12 +267,26 @@ cd web && npm test
 
 ### AWS App Runner (Recommended)
 
-The application is designed for deployment on AWS App Runner using a multi-stage Docker build:
+The application is designed for deployment on AWS App Runner using a multi-stage Docker build.
+
+**🚀 Quick Deploy with Script:**
+```bash
+# One-command deployment
+./deploy-backend.sh
+
+# Preview deployment (dry run)
+./deploy-backend.sh --dry-run
+
+# Deploy with verbose output
+./deploy-backend.sh --verbose
+```
+
+**📋 Manual Deployment Steps:**
 
 1. **Build and push Docker image to ECR**:
    ```bash
    # Login to ECR
-   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
+   aws ecr get-login-password --region us-east-1 --profile <your-profile> | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
    
    # Build and tag image
    docker build -t planner-bot .
@@ -280,11 +294,23 @@ The application is designed for deployment on AWS App Runner using a multi-stage
    
    # Push to ECR
    docker push <account>.dkr.ecr.us-east-1.amazonaws.com/planner-bot:latest
+   
+   # Deploy to App Runner
+   aws apprunner start-deployment --service-arn <service-arn> --region us-east-1 --profile <your-profile>
    ```
 
-2. **Create App Runner service** (see `aws-setup.md` for detailed instructions)
-3. **Configure environment variables** in App Runner console
-4. **Set up observability** with LangSmith and CloudWatch
+2. **Monitor deployment**:
+   - AWS Console: [App Runner Dashboard](https://console.aws.amazon.com/apprunner/)
+   - Health Check: `https://your-domain.awsapprunner.com/health`
+   - API Docs: `https://your-domain.awsapprunner.com/docs`
+
+**⚙️ Deployment Script Features:**
+- Pre-flight checks (Docker, AWS CLI, credentials)
+- Automated build, tag, push, and deploy process
+- Colored output with progress indicators
+- Error handling with clear messaging
+- Dry-run mode for testing
+- Post-deployment information and monitoring links
 
 ### Docker Compose (Development)
 

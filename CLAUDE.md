@@ -78,6 +78,12 @@ docker run -p 8000:8000 planner-bot
 
 # Testing
 pytest tests/
+
+# Deployment
+./deploy-backend.sh              # Deploy to AWS App Runner
+./deploy-backend.sh --dry-run    # Preview deployment
+make deploy                      # Deploy via Make
+make deploy-dry-run             # Preview via Make
 ```
 
 ## Environment Variables
