@@ -30,6 +30,50 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
   const inputRef = useRef<HTMLInputElement>(null)
   const userId = useCurrentUserId()
 
+  // Storage key for this project's conversation
+  const conversationKey = `conversation_${projectSlug}_${userId}`
+
+  // Load conversation from sessionStorage on mount or project change
+  useEffect(() => {
+    const loadStoredConversation = () => {
+      try {
+        const storedConversation = sessionStorage.getItem(conversationKey)
+        if (storedConversation) {
+          const parsedMessages = JSON.parse(storedConversation)
+          // Convert timestamp strings back to Date objects
+          const messagesWithDates = parsedMessages.map((msg: Message & { timestamp: string }) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+          setMessages(messagesWithDates)
+          console.log(`Loaded ${messagesWithDates.length} messages for project ${projectSlug}`)
+          return true // Found stored conversation
+        }
+      } catch (error) {
+        console.error('Error loading stored conversation:', error)
+        sessionStorage.removeItem(conversationKey) // Clear corrupted data
+      }
+      return false // No stored conversation
+    }
+    
+    const hasStoredConversation = loadStoredConversation()
+    if (!hasStoredConversation) {
+      setMessages([]) // Clear messages if no stored conversation
+    }
+  }, [projectSlug, userId, conversationKey])
+
+  // Save conversation to sessionStorage whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        sessionStorage.setItem(conversationKey, JSON.stringify(messages))
+        console.log(`Saved ${messages.length} messages for project ${projectSlug}`)
+      } catch (error) {
+        console.error('Error saving conversation:', error)
+      }
+    }
+  }, [messages, conversationKey, projectSlug])
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -48,8 +92,18 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
   useEffect(() => {
     inputRef.current?.focus()
     
-    // Fetch initial message automatically
+    // Fetch initial message automatically (but only if no stored conversation)
     const fetchInitialMessage = async () => {
+      // Check if we have stored conversation first
+      try {
+        const storedConversation = sessionStorage.getItem(conversationKey)
+        if (storedConversation && JSON.parse(storedConversation).length > 0) {
+          return // Don't fetch initial message if we have stored conversation
+        }
+      } catch {
+        // If parsing fails, continue with initial message fetch
+      }
+      
       if (messages.length > 0) return // Don't fetch if we already have messages
       
       try {
@@ -119,7 +173,7 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
     }
     
     fetchInitialMessage()
-  }, [projectSlug, userId]) // Re-run when project or user changes
+  }, [projectSlug, userId, conversationKey, messages.length]) // Re-run when project or user changes
 
   const handleSendMessage = async () => {
     if (!input.trim() || isStreaming) return
