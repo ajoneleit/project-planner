@@ -129,21 +129,21 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
 
   if (error) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-4 bg-white">
+      <div className="h-full flex flex-col items-center justify-center p-4 bg-card">
         <div className="text-center">
-          <p className="text-red-600 font-medium mb-2">Failed to load projects</p>
-          <p className="text-sm text-gray-500">Check your connection and try again</p>
+          <p className="text-destructive font-medium mb-2">Failed to load projects</p>
+          <p className="text-sm text-muted-foreground">Check your connection and try again</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-card">
       {/* Header */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Projects</h2>
+          <h2 className="text-lg font-semibold text-card-foreground">Projects</h2>
           
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -158,7 +158,7 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">Project Name</label>
+                  <label className="text-sm font-medium text-foreground">Project Name</label>
                   <Input
                     value={newProjectName}
                     onChange={(e) => setNewProjectName(e.target.value)}
@@ -167,7 +167,7 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Description (Optional)</label>
+                  <label className="text-sm font-medium text-foreground">Description (Optional)</label>
                   <Textarea
                     value={newProjectDescription}
                     onChange={(e) => setNewProjectDescription(e.target.value)}
@@ -220,7 +220,7 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               ) : !projects || projects.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-muted-foreground">
                   <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="text-sm">No active projects</p>
                   <p className="text-xs">Create your first project to get started</p>
@@ -233,25 +233,25 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
                         onClick={() => router.push(`/p/${project.slug}`)}
                         className={cn(
                           "w-full text-left p-3 rounded-lg transition-colors pr-10",
-                          "hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500",
-                          currentSlug === project.slug ? "bg-blue-50 border border-blue-200" : "border border-transparent"
+                          "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
+                          currentSlug === project.slug ? "bg-accent border border-border" : "border border-transparent"
                         )}
                       >
                         <div className="flex items-start space-x-3">
                           <Folder className={cn(
                             "h-5 w-5 mt-0.5 flex-shrink-0",
-                            currentSlug === project.slug ? "text-blue-600" : "text-gray-400"
+                            currentSlug === project.slug ? "text-primary" : "text-muted-foreground"
                           )} />
                           <div className="flex-1 min-w-0">
                             <p className={cn(
                               "font-medium text-sm truncate",
-                              currentSlug === project.slug ? "text-blue-900" : "text-gray-900"
+                              currentSlug === project.slug ? "text-foreground" : "text-foreground"
                             )}>
                               {project.name}
                             </p>
                             <div className="flex items-center mt-1">
-                              <Calendar className="h-3 w-3 text-gray-400 mr-1" />
-                              <p className="text-xs text-gray-500">
+                              <Calendar className="h-3 w-3 text-muted-foreground mr-1" />
+                              <p className="text-xs text-muted-foreground">
                                 {formatDate(project.created)}
                               </p>
                             </div>
@@ -324,7 +324,7 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               ) : !archivedProjects || archivedProjects.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-muted-foreground">
                   <Archive className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="text-sm">No archived projects</p>
                   <p className="text-xs">Archived projects will appear here</p>
@@ -335,17 +335,17 @@ export function ProjectSidebar({ currentSlug }: ProjectSidebarProps) {
                     <div key={project.slug} className="group relative">
                       <button
                         onClick={() => router.push(`/p/${project.slug}`)}
-                        className="w-full text-left p-3 rounded-lg transition-colors pr-10 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent"
+                        className="w-full text-left p-3 rounded-lg transition-colors pr-10 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring border border-transparent"
                       >
                         <div className="flex items-start space-x-3">
-                          <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-gray-400" />
+                          <Archive className="h-5 w-5 mt-0.5 flex-shrink-0 text-muted-foreground" />
                           <div className="flex-1 min-w-0 opacity-75">
-                            <p className="font-medium text-sm truncate text-gray-700">
+                            <p className="font-medium text-sm truncate text-foreground">
                               {project.name}
                             </p>
                             <div className="flex items-center mt-1">
-                              <Calendar className="h-3 w-3 text-gray-400 mr-1" />
-                              <p className="text-xs text-gray-500">
+                              <Calendar className="h-3 w-3 text-muted-foreground mr-1" />
+                              <p className="text-xs text-muted-foreground">
                                 {formatDate(project.created)}
                               </p>
                             </div>

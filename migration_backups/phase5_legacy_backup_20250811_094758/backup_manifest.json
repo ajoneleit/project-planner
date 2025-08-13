@@ -1,0 +1,80 @@
+{
+  "timestamp": "20250811_094758",
+  "phase": "phase_5_cleanup",
+  "backed_up_files": [
+    {
+      "original_path": "app/memory/ambers-project.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/ambers-project.md",
+      "category": "markdown_files",
+      "size_bytes": 4142,
+      "checksum": "74d0f64c72be33087f8040f1fff1ade0"
+    },
+    {
+      "original_path": "app/memory/demo.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/demo.md",
+      "category": "markdown_files",
+      "size_bytes": 2010,
+      "checksum": "1ae78cb77fdce5ac215e7ea94d88d5a4"
+    },
+    {
+      "original_path": "app/memory/project.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/project.md",
+      "category": "markdown_files",
+      "size_bytes": 1493,
+      "checksum": "b7ed7aead428308f5ede3180b7b8a94d"
+    },
+    {
+      "original_path": "app/memory/test-document-project.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/test-document-project.md",
+      "category": "markdown_files",
+      "size_bytes": 287,
+      "checksum": "1f8b34e8f4790780104a648ba9dacbfa"
+    },
+    {
+      "original_path": "app/memory/test-dual-agent.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/test-dual-agent.md",
+      "category": "markdown_files",
+      "size_bytes": 1127,
+      "checksum": "92631fa690a1607e5c3d8ccc4552795f"
+    },
+    {
+      "original_path": "app/memory/test-e2e-conversation.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/test-e2e-conversation.md",
+      "category": "markdown_files",
+      "size_bytes": 1409,
+      "checksum": "6594c1c55c377e890289a700a24c56a9"
+    },
+    {
+      "original_path": "app/memory/test-reference-project.md",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/markdown_files/test-reference-project.md",
+      "category": "markdown_files",
+      "size_bytes": 5805,
+      "checksum": "df97f099d8d8d96d8d929e7dbde3a143"
+    },
+    {
+      "original_path": "app/memory/index.json",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/json_files/index.json",
+      "category": "json_files",
+      "size_bytes": 238,
+      "checksum": "e6a2fe2295e3d74c2a7b2e1f6f296bc4"
+    },
+    {
+      "original_path": "app/memory/users.json",
+      "backup_path": "migration_backups/phase5_legacy_backup_20250811_094758/json_files/users.json",
+      "category": "json_files",
+      "size_bytes": 973,
+      "checksum": "a88297efa54feb10accfa72f77b4380b"
+    }
+  ],
+  "file_checksums": {
+    "app/memory/ambers-project.md": "74d0f64c72be33087f8040f1fff1ade0",
+    "app/memory/demo.md": "1ae78cb77fdce5ac215e7ea94d88d5a4",
+    "app/memory/project.md": "b7ed7aead428308f5ede3180b7b8a94d",
+    "app/memory/test-document-project.md": "1f8b34e8f4790780104a648ba9dacbfa",
+    "app/memory/test-dual-agent.md": "92631fa690a1607e5c3d8ccc4552795f",
+    "app/memory/test-e2e-conversation.md": "6594c1c55c377e890289a700a24c56a9",
+    "app/memory/test-reference-project.md": "df97f099d8d8d96d8d929e7dbde3a143",
+    "app/memory/index.json": "e6a2fe2295e3d74c2a7b2e1f6f296bc4",
+    "app/memory/users.json": "a88297efa54feb10accfa72f77b4380b"
+  }
+}

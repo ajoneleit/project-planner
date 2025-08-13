@@ -1,0 +1,23 @@
+{
+  "ambers-project": {
+    "created": "2025-08-13T13:29:24.980803",
+    "file_path": "ambers-project.md",
+    "status": "active",
+    "name": "ambers-project",
+    "description": "Test project for conversation memory"
+  },
+  "agentic-system": {
+    "created": "2025-08-13T15:59:40.385504",
+    "file_path": "agentic-system.md",
+    "status": "active",
+    "name": "Agentic System",
+    "description": "AI-powered conversational systems project"
+  },
+  "test-openai-agents": {
+    "created": "2025-08-13T16:33:33.560837",
+    "file_path": "test-openai-agents.md",
+    "status": "active",
+    "name": "Test OpenAI Agents",
+    "description": "Testing the new OpenAI Agents SDK implementation"
+  }
+}

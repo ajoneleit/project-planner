@@ -7,13 +7,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 import os
 import json
 import asyncio
 import logging
 import time
 import uuid
+from datetime import datetime
 import socket
 from pathlib import Path
 from typing import List, Dict, Any
@@ -22,12 +23,12 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging with structured format
-logging.basicConfig(
-    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Configure SECURE logging that sanitizes sensitive data
+from .core.logging_config import setup_secure_logging, get_secure_logger
+logger = setup_secure_logging(os.getenv('LOG_LEVEL', 'INFO'))
+
+# Additional secure logger for this module
+module_logger = get_secure_logger(__name__)
 
 app = FastAPI(
     title="Project Planner Bot", 
@@ -37,67 +38,12 @@ app = FastAPI(
 
 # Enhanced CORS configuration
 def get_cors_origins():
-    """Get CORS origins based on environment with proper security."""
-    env = os.getenv("ENVIRONMENT", "development")
+    """DEPRECATED: Use CORSConfig.get_allowed_origins() instead for security"""
+    # Import the secure CORS configuration
+    from .core.cors_config import CORSConfig
     
-    if env == "production":
-        # Production: Only allow same-origin and specific production domains
-        production_origins = []
-        
-        # Add App Runner domain if available
-        app_runner_domain = os.getenv("PRODUCTION_DOMAIN")
-        if app_runner_domain:
-            production_origins.append(f"https://{app_runner_domain}")
-        
-        # Add custom production domains from environment
-        custom_domains = os.getenv("CORS_PRODUCTION_ORIGINS", "")
-        if custom_domains:
-            production_origins.extend(custom_domains.split(","))
-        
-        # If no specific domains configured, allow same-origin only
-        if not production_origins:
-            # This is secure for same-origin requests when frontend is served by FastAPI
-            return ["*"]
-        
-        logger.info(f"Production CORS origins: {production_origins}")
-        return production_origins
-    else:
-        # Development: Allow comprehensive localhost and local network access
-        origins = [
-            # Standard development ports
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://localhost:8000",
-            "http://localhost:8001",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:3001",
-            "http://127.0.0.1:8000",
-            "http://127.0.0.1:8001",
-        ]
-        
-        # Add custom development origins from environment
-        custom_origins = os.getenv("CORS_DEVELOPMENT_ORIGINS", "")
-        if custom_origins:
-            origins.extend(custom_origins.split(","))
-        
-        # Add dynamic local network IPs for Docker/WSL scenarios
-        try:
-            hostname = socket.gethostname()
-            local_ip = socket.gethostbyname(hostname)
-            for port in [3000, 3001, 8000, 8001]:
-                origins.extend([
-                    f"http://{local_ip}:{port}",
-                ])
-        except Exception as e:
-            logger.debug(f"Could not detect local IP for CORS: {e}")
-        
-        # Remove duplicates while preserving order
-        unique_origins = []
-        for origin in origins:
-            if origin not in unique_origins:
-                unique_origins.append(origin)
-        
-        return unique_origins
+    module_logger.warning("Using deprecated get_cors_origins() - migrate to CORSConfig")
+    return CORSConfig.get_allowed_origins()
 
 def get_cors_headers():
     """Get allowed headers for CORS."""
@@ -169,22 +115,16 @@ def get_sse_headers(request: Request = None):
     return headers
 
 # Configure CORS with enhanced security and development support
-cors_origins = get_cors_origins()
-cors_headers = get_cors_headers()
-exposed_headers = get_exposed_headers()
+# CORS configuration moved to secure CORSConfig class
 
-logger.info(f"CORS origins configured: {cors_origins}")
-logger.info(f"CORS headers allowed: {cors_headers}")
+# Configure SECURE CORS - replaces insecure configuration
+from .core.cors_config import CORSConfig
+app = CORSConfig.configure_cors(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=cors_headers,
-    expose_headers=exposed_headers,
-    max_age=86400,  # Cache preflight requests for 24 hours
-)
+# Validate CORS configuration and log warnings
+cors_warnings = CORSConfig.validate_cors_config()
+for warning in cors_warnings:
+    module_logger.warning(f"CORS Security Warning: {warning}")
 
 # Request logging middleware
 @app.middleware("http")
@@ -205,14 +145,44 @@ async def log_requests(request: Request, call_next):
 
 # Request/Response models
 class CreateProjectRequest(BaseModel):
-    name: str
-    description: str = ""
-    created_by: str = "anonymous"  # User ID who created the project
+    name: str = Field(..., min_length=1, max_length=100, description="Project name")
+    description: str = Field("", max_length=10000, description="Project description")
+    created_by: str = Field("anonymous", max_length=50, description="User ID who created the project")
+    
+    @validator('name')
+    def validate_name(cls, v):
+        # Import security validation
+        from .core.security import SecurityUtils
+        sanitized = SecurityUtils.sanitize_for_logging(v.strip())
+        if not sanitized or len(sanitized) < 1:
+            raise ValueError("Project name cannot be empty")
+        if len(sanitized) > 100:
+            raise ValueError("Project name too long (max 100 characters)")
+        # Check for path traversal attempts
+        if '..' in sanitized or '/' in sanitized or '\\' in sanitized:
+            raise ValueError("Project name contains invalid characters")
+        return sanitized
+    
+    @validator('created_by')
+    def validate_created_by(cls, v):
+        from .core.memory_unified import validate_user_id
+        return validate_user_id(v)
 
 class ChatRequest(BaseModel):
-    message: str
-    model: str = "gpt-4o-mini"
-    user_id: str = "anonymous"  # User ID for attribution
+    message: str = Field(..., min_length=1, max_length=50000, description="Chat message")
+    model: str = Field("gpt-4o-mini", pattern=r'^(gpt-4o-mini|gpt-4o|o1-mini|o1-preview)$', description="AI model to use")
+    user_id: str = Field("anonymous", max_length=50, description="User ID for attribution")
+    
+    @validator('message')
+    def validate_message(cls, v):
+        from .core.memory_unified import validate_content_size
+        validate_content_size(v)  # Uses 10MB limit
+        return v.strip()
+    
+    @validator('user_id')
+    def validate_user_id(cls, v):
+        from .core.memory_unified import validate_user_id
+        return validate_user_id(v)
 
 class ProjectResponse(BaseModel):
     slug: str
@@ -221,8 +191,19 @@ class ProjectResponse(BaseModel):
     status: str
 
 class UserRegistrationRequest(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: str = Field(..., min_length=1, max_length=50, description="User first name")
+    last_name: str = Field(..., min_length=1, max_length=50, description="User last name")
+    
+    @validator('first_name', 'last_name')
+    def validate_names(cls, v):
+        # Sanitize names
+        import re
+        sanitized = re.sub(r'[^a-zA-Z\s\'-]', '', v.strip())
+        if not sanitized or len(sanitized) < 1:
+            raise ValueError("Name cannot be empty or contain only special characters")
+        if len(sanitized) > 50:
+            raise ValueError("Name too long (max 50 characters)")
+        return sanitized
 
 class UserResponse(BaseModel):
     id: str
@@ -245,10 +226,12 @@ async def health_check():
         "service": "planner-bot",
         "version": "1.0.0",
         "environment": os.getenv("ENVIRONMENT", "unknown"),
-        "cors_origins": cors_origins,
+        "cors_origins": get_cors_origins(),
         "langsmith_enabled": os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true",
         "default_model": os.getenv("DEFAULT_MODEL", "gpt-4o-mini"),
         "static_files_mounted": os.path.exists(static_dir),
+        "agent_system": "openai-agents-sdk" if os.getenv("USE_OPENAI_AGENTS", "false").lower() == "true" else "langgraph",
+        "openai_agents_enabled": os.getenv("USE_OPENAI_AGENTS", "false").lower() == "true",
         "timestamp": time.time()
     }
 
@@ -312,9 +295,12 @@ async def register_user(request: UserRegistrationRequest):
             "display_name": display_name
         }
         
+    except ValueError as e:
+        logger.warning(f"Invalid user registration data: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
     except Exception as e:
-        logger.error(f"Error registering user: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error registering user: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/users/{user_id}", response_model=UserResponse)
 async def get_user(user_id: str):
@@ -338,9 +324,12 @@ async def get_user(user_id: str):
         
     except HTTPException:
         raise
+    except KeyError as e:
+        logger.warning(f"User data missing required field: {e}")
+        raise HTTPException(status_code=500, detail="Invalid user data format")
     except Exception as e:
-        logger.error(f"Error getting user: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error getting user: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/users", response_model=List[UserResponse])
 async def list_users():
@@ -363,9 +352,12 @@ async def list_users():
             for user in users
         ]
         
+    except OSError as e:
+        logger.error(f"Database access error listing users: {e}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error listing users: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error listing users: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/projects", response_model=Dict[str, str])
 async def create_project(request: CreateProjectRequest):
@@ -374,7 +366,9 @@ async def create_project(request: CreateProjectRequest):
     try:
         logger.info(f"Creating project: {request.name}")
         
-        from .langgraph_runner import ProjectRegistry, MarkdownMemory
+        from .langgraph_runner import ProjectRegistry
+        from .core.memory_unified import get_unified_memory
+        from .core.feature_flags import is_feature_enabled
         
         # Generate slug from name
         slug = request.name.lower().replace(" ", "-").replace("_", "-")
@@ -394,9 +388,104 @@ async def create_project(request: CreateProjectRequest):
             "description": request.description
         })
         
-        # Initialize markdown file
-        memory = MarkdownMemory(slug)
-        await memory.ensure_file_exists()
+        # Phase 2: Initialize project using unified memory system
+        if await is_feature_enabled("unified_memory_primary"):
+            # Use unified memory system directly
+            unified_memory = await get_unified_memory()
+            
+            # Create initial project document
+            project_name = request.name.replace('-', ' ').title()
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            if request.description and request.description.strip():
+                executive_summary = request.description.strip()
+                context_content = request.description.strip()
+            else:
+                executive_summary = "Please provide more information about this project's purpose, goals, and context."
+                context_content = "*Background and motivation for this project*"
+            
+            initial_content = f"""# {project_name}
+_Last updated: {current_time}_
+
+---
+
+## Executive Summary
+{executive_summary}
+
+---
+
+## Objective
+- [ ] Define specific, measurable project goals
+- [ ] Establish success criteria
+- [ ] Identify key deliverables
+
+---
+
+## Context
+{context_content}
+
+---
+
+## Glossary
+
+| Term | Definition | Added by |
+
+---
+
+## Constraints & Risks
+*Technical limitations, resource constraints, and identified risks*
+
+---
+
+## Stakeholders & Collaborators
+
+| Role / Name | Responsibilities |
+
+---
+
+## Systems & Data Sources
+*Technical infrastructure, data sources, tools and platforms*
+
+---
+
+## Attachments & Examples
+
+| Item | Type | Location | Notes |
+
+---
+
+## Open Questions & Conflicts
+
+| Question/Conflict | Owner | Priority | Status |
+
+---
+
+## Next Actions
+
+| When | Action | Why it matters | Owner |
+
+---
+
+## Recent Updates
+*Latest changes and additions to this document*
+
+---
+
+## Change Log
+
+| Date | Contributor | User ID | Summary |
+| {current_time} | System | system | Initial structured project document created |
+"""
+            
+            await unified_memory.save_project(slug, initial_content, "system")
+            logger.info(f"Project {slug} created using unified memory system")
+            
+        else:
+            # Fallback to compatibility layer
+            from .core.memory_compatibility import CompatibilityMarkdownMemory
+            memory = CompatibilityMarkdownMemory(slug)
+            await memory._create_initial_file(request.description)
+            logger.info(f"Project {slug} created using compatibility layer")
         
         logger.info(f"Project created successfully: {slug}")
         
@@ -405,9 +494,15 @@ async def create_project(request: CreateProjectRequest):
             "message": f"Project '{request.name}' created successfully"
         }
         
+    except ValueError as e:
+        logger.warning(f"Invalid project creation data: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+    except OSError as e:
+        logger.error(f"File system error creating project: {e}")
+        raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error creating project: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error creating project: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/projects", response_model=List[ProjectResponse])
 async def list_projects():
@@ -430,16 +525,19 @@ async def list_projects():
         
         return sorted(projects, key=lambda x: x.created, reverse=True)
         
+    except OSError as e:
+        logger.error(f"Database access error listing projects: {e}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error listing projects: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error listing projects: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/projects/{slug}/chat")
 async def chat_with_project(slug: str, request: ChatRequest, http_request: Request):
     """Stream chat responses for a specific project."""
     
     try:
-        from .langgraph_runner import ProjectRegistry, stream_chat_response
+        from .langgraph_runner import ProjectRegistry
         
         logger.info(f"Chat request for project {slug}: {request.message[:100]}...")
         
@@ -448,18 +546,50 @@ async def chat_with_project(slug: str, request: ChatRequest, http_request: Reque
         if slug not in projects:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        # Stream the response with proper CORS headers
-        return StreamingResponse(
-            stream_chat_response(slug, request.message, request.model, request.user_id),
-            media_type="text/event-stream",
-            headers=get_sse_headers(http_request)
-        )
+        # Feature flag to choose between LangGraph and OpenAI Agents SDK
+        use_openai_agents = os.getenv("USE_OPENAI_AGENTS", "false").lower() == "true"
+        
+        if use_openai_agents:
+            # Use OpenAI Agents SDK
+            from .openai_agents_runner import get_openai_runner
+            
+            async def stream_openai_agents_response():
+                try:
+                    runner = await get_openai_runner()
+                    async for chunk in runner.run_conversation_stream(slug, request.message, request.model):
+                        yield f"data: {chunk}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    logger.error(f"Error in OpenAI Agents streaming: {e}")
+                    yield f"data: Error: {str(e)}\n\n"
+                    yield "data: [DONE]\n\n"
+            
+            return StreamingResponse(
+                stream_openai_agents_response(),
+                media_type="text/event-stream",
+                headers=get_sse_headers(http_request)
+            )
+        else:
+            # Use existing LangGraph system
+            from .langgraph_runner import stream_chat_response
+            
+            return StreamingResponse(
+                stream_chat_response(slug, request.message, request.model, request.user_id),
+                media_type="text/event-stream",
+                headers=get_sse_headers(http_request)
+            )
         
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid chat request: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+    except OSError as e:
+        logger.error(f"I/O error in chat endpoint: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error in chat endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/projects/{slug}/initial-message")
 async def get_initial_message(slug: str, user_id: str = "anonymous", http_request: Request = None):
@@ -484,33 +614,61 @@ async def get_initial_message(slug: str, user_id: str = "anonymous", http_reques
         
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid initial message request: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+    except OSError as e:
+        logger.error(f"I/O error in initial message endpoint: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error in initial message endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error in initial message endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/projects/{slug}/file")
 async def get_project_file(slug: str):
     """Get the raw markdown content for a project."""
     
     try:
-        from .langgraph_runner import ProjectRegistry, MarkdownMemory
+        from .langgraph_runner import ProjectRegistry
+        from .core.memory_unified import get_unified_memory
+        from .core.feature_flags import is_feature_enabled
         
         # Verify project exists
         projects = await ProjectRegistry.list_projects()
         if slug not in projects:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        # Read markdown content
-        memory = MarkdownMemory(slug)
-        content = await memory.read_content()
+        # Phase 2: Read using unified memory system
+        if await is_feature_enabled("unified_memory_primary"):
+            # Use unified memory system directly
+            unified_memory = await get_unified_memory()
+            content = await unified_memory.get_project(slug)
+            
+            if content is None:
+                raise HTTPException(status_code=404, detail="Project content not found")
+                
+        else:
+            # Fallback to compatibility layer
+            from .core.memory_compatibility import CompatibilityMarkdownMemory
+            memory = CompatibilityMarkdownMemory(slug)
+            content = await memory.read_content()
         
         return {"content": content}
         
     except HTTPException:
         raise
+    except FileNotFoundError as e:
+        logger.warning(f"Project file not found: {e}")
+        raise HTTPException(status_code=404, detail="Project file not found")
+    except PermissionError as e:
+        logger.error(f"Permission denied reading project file: {e}")
+        raise HTTPException(status_code=403, detail="Access denied")
+    except OSError as e:
+        logger.error(f"File system error reading project: {e}")
+        raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error reading project file: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error reading project file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.put("/api/projects/{slug}/archive")
 async def archive_project(slug: str):
@@ -528,9 +686,15 @@ async def archive_project(slug: str):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid archive request: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+    except OSError as e:
+        logger.error(f"Database error archiving project: {e}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error archiving project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error archiving project: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.put("/api/projects/{slug}/unarchive")
 async def unarchive_project(slug: str):
@@ -548,9 +712,15 @@ async def unarchive_project(slug: str):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid unarchive request: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+    except OSError as e:
+        logger.error(f"Database error unarchiving project: {e}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error unarchiving project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error unarchiving project: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.delete("/api/projects/{slug}")
 async def delete_project(slug: str):
@@ -568,9 +738,15 @@ async def delete_project(slug: str):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid delete request: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
+    except OSError as e:
+        logger.error(f"Database error deleting project: {e}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error deleting project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error deleting project: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/projects/archived", response_model=List[ProjectResponse])
 async def list_archived_projects():
@@ -595,9 +771,12 @@ async def list_archived_projects():
         
         return project_list
         
+    except OSError as e:
+        logger.error(f"Database access error listing archived projects: {e}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error(f"Error listing archived projects: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error listing archived projects: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Observability endpoints
 @app.get("/api/observability/metrics")
@@ -611,12 +790,15 @@ async def get_metrics():
             "langsmith_enabled": os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true",
             "model": os.getenv("DEFAULT_MODEL", "unknown"),
             "environment": os.getenv("ENVIRONMENT", "unknown"),
-            "cors_origins_count": len(cors_origins),
+            "cors_origins_count": len(get_cors_origins()),
             "timestamp": time.time()
         }
+    except OSError as e:
+        logger.error(f"Database access error getting metrics: {e}")
+        return {"error": "Database temporarily unavailable", "timestamp": time.time()}
     except Exception as e:
-        logger.error(f"Error getting metrics: {e}")
-        return {"error": str(e)}
+        logger.error(f"Unexpected error getting metrics: {e}", exc_info=True)
+        return {"error": "Internal server error", "timestamp": time.time()}
 
 if __name__ == "__main__":
     import uvicorn

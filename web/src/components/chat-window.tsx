@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Loader2, User, Bot, FileEdit } from 'lucide-react'
+import { ExpandableTextarea } from '@/components/expandable-textarea'
+import { Send, Loader2, Bot, FileEdit } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiStreamRequest, apiConfig } from '@/lib/api'
-import { useCurrentUserId } from '@/contexts/UserContext'
+import { useCurrentUserId, useUserDisplay } from '@/contexts/UserContext'
+import { UserAvatar } from '@/components/user-avatar'
 
 interface Message {
   id: string
@@ -27,8 +28,9 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const userId = useCurrentUserId()
+  const { displayName, isAnonymous } = useUserDisplay()
 
   // Storage key for this project's conversation
   const conversationKey = `conversation_${projectSlug}_${userId}`
@@ -90,7 +92,7 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
 
   // Focus input on mount and fetch initial message
   useEffect(() => {
-    inputRef.current?.focus()
+    textareaRef.current?.focus()
     
     // Fetch initial message automatically (but only if no stored conversation)
     const fetchInitialMessage = async () => {
@@ -298,11 +300,11 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-background">
       {/* Chat Header */}
-      <div className="flex-shrink-0 p-4 border-b">
-        <h3 className="font-medium text-gray-900">Project Chat</h3>
-        <p className="text-sm text-gray-500">Ask questions or request changes - I&apos;ll update your document automatically</p>
+      <div className="flex-shrink-0 p-4 border-b border-border bg-card">
+        <h3 className="font-medium text-card-foreground">Project Chat</h3>
+        <p className="text-sm text-muted-foreground">Ask questions or request changes - I&apos;ll update your document automatically</p>
       </div>
 
       {/* Messages - Scrollable area with proper height constraints */}
@@ -312,9 +314,9 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
             <div className="space-y-4 min-h-full">
               {messages.length === 0 ? (
                 <div className="text-center py-8">
-                  <Bot className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-500 mb-2">Start a conversation</p>
-                  <p className="text-sm text-gray-400">
+                  <Bot className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground mb-2">Start a conversation</p>
+                  <p className="text-sm text-muted-foreground/70">
                     I can answer questions and automatically update your project document
                   </p>
                 </div>
@@ -328,8 +330,8 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
                 )}
               >
                 {message.role === 'assistant' && (
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-blue-600" />
+                  <div className="flex-shrink-0 w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-primary" />
                   </div>
                 )}
                 
@@ -337,8 +339,8 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
                   className={cn(
                     "max-w-[80%] rounded-lg p-3",
                     message.role === 'user'
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-900"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
                   )}
                 >
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -346,13 +348,13 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
                     <p
                       className={cn(
                         "text-xs",
-                        message.role === 'user' ? "text-blue-100" : "text-gray-500"
+                        message.role === 'user' ? "text-primary-foreground/70" : "text-muted-foreground/70"
                       )}
                     >
                       {formatTime(message.timestamp)}
                     </p>
                     {message.hasDocumentUpdate && (
-                      <div className="flex items-center text-xs text-green-600">
+                      <div className="flex items-center text-xs text-green-600 dark:text-green-400">
                         <FileEdit className="h-3 w-3 mr-1" />
                         Doc Updated
                       </div>
@@ -361,9 +363,12 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
                 </div>
 
                 {message.role === 'user' && (
-                  <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-gray-600" />
-                  </div>
+                  <UserAvatar 
+                    userId={userId} 
+                    name={isAnonymous ? undefined : displayName}
+                    size="md" 
+                    isAnonymous={isAnonymous}
+                  />
                 )}
                   </div>
                 ))
@@ -371,13 +376,13 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
               
               {isStreaming && (
                 <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-blue-600" />
+                  <div className="flex-shrink-0 w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="bg-gray-100 rounded-lg p-3">
+                  <div className="bg-muted rounded-lg p-3">
                     <div className="flex items-center space-x-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm text-gray-500">Thinking and updating document...</span>
+                      <span className="text-sm text-muted-foreground">Thinking and updating document...</span>
                     </div>
                   </div>
                 </div>
@@ -388,21 +393,25 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
       </div>
 
       {/* Fixed Input Bar */}
-      <div className="flex-shrink-0 p-4 border-t bg-white shadow-lg">
-        <div className="flex space-x-2">
-          <Input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask a question or describe what you want to add to your project..."
-            disabled={isStreaming}
-            className="flex-1"
-          />
+      <div className="flex-shrink-0 p-4 border-t border-border bg-card shadow-lg">
+        <div className="flex items-end space-x-2">
+          <div className="flex-1">
+            <ExpandableTextarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask a question or describe what you want to add to your project..."
+              disabled={isStreaming}
+              maxRows={5}
+              minRows={1}
+            />
+          </div>
           <Button
             onClick={handleSendMessage}
             disabled={!input.trim() || isStreaming}
             size="sm"
+            className="mb-1"
           >
             {isStreaming ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -411,12 +420,12 @@ export function ChatWindow({ projectSlug, onMessageComplete }: ChatWindowProps) 
             )}
           </Button>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-muted-foreground mt-2">
           💡 Try: &quot;Add a task to integrate with Slack&quot; or &quot;What are the main risks for this project?&quot;
         </p>
         
         {/* Connection status */}
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="mt-2 text-xs text-muted-foreground/50">
           Connected to: {apiConfig.baseUrl}
         </div>
       </div>

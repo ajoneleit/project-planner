@@ -125,12 +125,12 @@ export function MarkdownViewer({ projectSlug, lastChatUpdate }: MarkdownViewerPr
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b flex items-center justify-between">
+      <div className="flex-shrink-0 p-4 border-b border-border bg-card flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <FileText className="h-5 w-5 text-gray-600" />
-          <h3 className="font-medium text-gray-900">Project Document</h3>
+          <FileText className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-medium text-card-foreground">Project Document</h3>
           <div className="flex items-center text-xs text-green-600">
             <Wifi className="h-3 w-3 mr-1" />
             Auto-sync (30s)
@@ -168,15 +168,15 @@ export function MarkdownViewer({ projectSlug, lastChatUpdate }: MarkdownViewerPr
             <div className="flex items-center justify-center py-12">
               <div className="flex items-center space-x-2">
                 <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="text-gray-500">Loading document...</span>
+                <span className="text-muted-foreground">Loading document...</span>
               </div>
             </div>
           ) : error ? (
             <div className="text-center py-12">
-              <div className="text-red-600 mb-4">
+              <div className="text-destructive mb-4">
                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p className="font-medium">Error loading document</p>
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   {error instanceof Error ? error.message : 'Unknown error'}
                 </p>
               </div>
@@ -189,27 +189,27 @@ export function MarkdownViewer({ projectSlug, lastChatUpdate }: MarkdownViewerPr
               <ReactMarkdown
                 components={{
                   h1: ({ children }) => (
-                    <h1 className="text-3xl font-bold text-gray-900 mb-6 pb-3 border-b">
+                    <h1 className="text-3xl font-bold text-foreground mb-6 pb-3 border-b border-border">
                       {children}
                     </h1>
                   ),
                   h2: ({ children }) => (
-                    <h2 className="text-2xl font-semibold text-gray-800 mt-8 mb-4">
+                    <h2 className="text-2xl font-semibold text-foreground mt-8 mb-4">
                       {children}
                     </h2>
                   ),
                   h3: ({ children }) => (
-                    <h3 className="text-xl font-medium text-gray-800 mt-6 mb-3">
+                    <h3 className="text-xl font-medium text-foreground mt-6 mb-3">
                       {children}
                     </h3>
                   ),
                   p: ({ children }) => (
-                    <p className="text-gray-700 leading-relaxed mb-4">
+                    <p className="text-foreground leading-relaxed mb-4">
                       {children}
                     </p>
                   ),
                   strong: ({ children }) => (
-                    <strong className="font-semibold text-gray-900">
+                    <strong className="font-semibold text-foreground">
                       {children}
                     </strong>
                   ),
@@ -224,20 +224,20 @@ export function MarkdownViewer({ projectSlug, lastChatUpdate }: MarkdownViewerPr
                     </ol>
                   ),
                   li: ({ children }) => (
-                    <li className="text-gray-700">{children}</li>
+                    <li className="text-foreground">{children}</li>
                   ),
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-blue-200 pl-4 py-2 mb-4 bg-blue-50 text-gray-700 italic">
+                    <blockquote className="border-l-4 border-primary/20 pl-4 py-2 mb-4 bg-muted text-foreground italic">
                       {children}
                     </blockquote>
                   ),
                   code: ({ children }) => (
-                    <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">
+                    <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono text-foreground">
                       {children}
                     </code>
                   ),
                   pre: ({ children }) => (
-                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
+                    <pre className="bg-muted border border-border p-4 rounded-lg overflow-x-auto mb-4 text-foreground">
                       {children}
                     </pre>
                   ),
@@ -248,8 +248,8 @@ export function MarkdownViewer({ projectSlug, lastChatUpdate }: MarkdownViewerPr
             </div>
           ) : (
             <div className="text-center py-12">
-              <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-500">No content available</p>
+              <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">No content available</p>
             </div>
           )}
           </div>

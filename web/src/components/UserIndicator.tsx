@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useUser, useUserDisplay } from '@/contexts/UserContext'
 import { useUserIdentityModal, UserIdentityModal } from './UserIdentityModal'
+import { UserAvatar } from '@/components/user-avatar'
+import { useCurrentUserId } from '@/contexts/UserContext'
 
 interface UserIndicatorProps {
   onUserChange?: () => void
@@ -12,9 +14,10 @@ interface UserIndicatorProps {
 
 export function UserIndicator({ onUserChange, className = '' }: UserIndicatorProps) {
   const { clearUser, isLoading } = useUser()
-  const { displayName, initials, isAnonymous } = useUserDisplay()
+  const { displayName, isAnonymous } = useUserDisplay()
   const [showDropdown, setShowDropdown] = useState(false)
   const { isOpen, openModal, closeModal } = useUserIdentityModal()
+  const userId = useCurrentUserId()
 
   const handleUserChange = () => {
     setShowDropdown(false)
@@ -34,8 +37,8 @@ export function UserIndicator({ onUserChange, className = '' }: UserIndicatorPro
   if (isLoading) {
     return (
       <div className={`flex items-center space-x-2 ${className}`}>
-        <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse" />
-        <div className="w-20 h-4 bg-gray-200 rounded animate-pulse" />
+        <div className="w-8 h-8 bg-muted rounded-full animate-pulse" />
+        <div className="w-20 h-4 bg-muted rounded animate-pulse" />
       </div>
     )
   }
@@ -45,31 +48,28 @@ export function UserIndicator({ onUserChange, className = '' }: UserIndicatorPro
       <Button
         variant="ghost"
         onClick={toggleDropdown}
-        className="flex items-center space-x-2 h-auto p-2 hover:bg-gray-100"
+        className="flex items-center space-x-2 h-auto p-2 hover:bg-accent"
         disabled={isLoading}
       >
-        {/* User Avatar/Initials */}
-        <div className={`
-          w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium text-white
-          ${isAnonymous 
-            ? 'bg-gray-400' 
-            : 'bg-blue-500'
-          }
-        `}>
-          {initials}
-        </div>
+        {/* User Avatar */}
+        <UserAvatar 
+          userId={userId} 
+          name={isAnonymous ? undefined : displayName} 
+          size="md" 
+          isAnonymous={isAnonymous}
+        />
         
         {/* User Name */}
         <span className={`
           text-sm font-medium
-          ${isAnonymous ? 'text-gray-500' : 'text-gray-700'}
+          ${isAnonymous ? 'text-muted-foreground' : 'text-foreground'}
         `}>
           {displayName}
         </span>
         
         {/* Dropdown Arrow */}
         <svg
-          className={`w-4 h-4 text-gray-400 transition-transform ${
+          className={`w-4 h-4 text-muted-foreground transition-transform ${
             showDropdown ? 'rotate-180' : ''
           }`}
           fill="none"
@@ -90,18 +90,18 @@ export function UserIndicator({ onUserChange, className = '' }: UserIndicatorPro
           />
           
           {/* Dropdown Content */}
-          <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border z-20">
-            <div className="p-4 border-b">
+          <div className="absolute right-0 mt-2 w-72 bg-card rounded-lg shadow-lg border border-border z-20">
+            <div className="p-4 border-b border-border">
               <div className="flex items-center space-x-3">
-                <div className={`
-                  w-10 h-10 rounded-full flex items-center justify-center text-white font-medium
-                  ${isAnonymous ? 'bg-gray-400' : 'bg-blue-500'}
-                `}>
-                  {initials}
-                </div>
+                <UserAvatar 
+                  userId={userId} 
+                  name={isAnonymous ? undefined : displayName} 
+                  size="lg" 
+                  isAnonymous={isAnonymous}
+                />
                 <div>
-                  <p className="font-medium text-gray-900">{displayName}</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="font-medium text-card-foreground">{displayName}</p>
+                  <p className="text-sm text-muted-foreground">
                     {isAnonymous ? 'Anonymous User' : 'Registered User'}
                   </p>
                 </div>
@@ -118,7 +118,7 @@ export function UserIndicator({ onUserChange, className = '' }: UserIndicatorPro
                   <p className="font-medium">
                     {isAnonymous ? 'Register Name' : 'Switch User'}
                   </p>
-                  <p className="text-sm text-gray-500 leading-tight">
+                  <p className="text-sm text-muted-foreground leading-tight">
                     {isAnonymous 
                       ? 'Add your name for better attribution' 
                       : 'Change to a different user'
@@ -134,7 +134,7 @@ export function UserIndicator({ onUserChange, className = '' }: UserIndicatorPro
                     clearUser()
                     setShowDropdown(false)
                   }}
-                  className="w-full justify-start text-left p-3 h-auto text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="w-full justify-start text-left p-3 h-auto text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
                   <div>
                     <p className="font-medium">Continue as Anonymous</p>
@@ -159,10 +159,11 @@ export function UserIndicator({ onUserChange, className = '' }: UserIndicatorPro
 // Compact version for smaller spaces
 export function UserIndicatorCompact({ onUserChange, className = '' }: UserIndicatorProps) {
   const { isLoading } = useUser()
-  const { initials, isAnonymous, displayName } = useUserDisplay()
+  const { displayName, isAnonymous } = useUserDisplay()
+  const userId = useCurrentUserId()
 
   if (isLoading) {
-    return <div className={`w-8 h-8 bg-gray-200 rounded-full animate-pulse ${className}`} />
+    return <div className={`w-8 h-8 bg-muted rounded-full animate-pulse ${className}`} />
   }
 
   return (
@@ -172,12 +173,12 @@ export function UserIndicatorCompact({ onUserChange, className = '' }: UserIndic
       className={`p-1 h-auto ${className}`}
       title={`Current user: ${displayName} (click to change)`}
     >
-      <div className={`
-        w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium text-white
-        ${isAnonymous ? 'bg-gray-400' : 'bg-blue-500'}
-      `}>
-        {initials}
-      </div>
+      <UserAvatar 
+        userId={userId} 
+        name={isAnonymous ? undefined : displayName} 
+        size="md" 
+        isAnonymous={isAnonymous}
+      />
     </Button>
   )
 }

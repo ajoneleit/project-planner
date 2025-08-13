@@ -1,0 +1,90 @@
+{
+  "total_conversations": 6,
+  "total_messages": 23,
+  "conversation_details": {
+    "test-conversation": {
+      "message_count": 1,
+      "user_messages": 1,
+      "assistant_messages": 0,
+      "users": [
+        "test-user"
+      ],
+      "first_message": "2025-08-08 15:26:31",
+      "last_message": "2025-08-08 15:26:31",
+      "id_format": "simple_project"
+    },
+    "test-conversation-project:test-user": {
+      "message_count": 4,
+      "user_messages": 2,
+      "assistant_messages": 2,
+      "users": [
+        "test-user"
+      ],
+      "first_message": "2025-08-11 12:36:48",
+      "last_message": "2025-08-11 12:40:37",
+      "id_format": "project_user"
+    },
+    "test-e2e-conversation": {
+      "message_count": 2,
+      "user_messages": 1,
+      "assistant_messages": 1,
+      "users": [
+        "test-user"
+      ],
+      "first_message": "2025-08-11 12:40:38",
+      "last_message": "2025-08-11 12:40:38",
+      "id_format": "simple_project"
+    },
+    "test-flag-integration": {
+      "message_count": 2,
+      "user_messages": 1,
+      "assistant_messages": 1,
+      "users": [
+        "test-user"
+      ],
+      "first_message": "2025-08-11 12:40:37",
+      "last_message": "2025-08-11 12:40:38",
+      "id_format": "simple_project"
+    },
+    "test-project": {
+      "message_count": 2,
+      "user_messages": 1,
+      "assistant_messages": 1,
+      "users": [
+        "test-user"
+      ],
+      "first_message": "2025-08-08 15:24:24",
+      "last_message": "2025-08-08 15:24:24",
+      "id_format": "simple_project"
+    },
+    "test-reference-project:test-user": {
+      "message_count": 12,
+      "user_messages": 6,
+      "assistant_messages": 6,
+      "users": [
+        "test-user"
+      ],
+      "first_message": "2025-08-08 15:29:25",
+      "last_message": "2025-08-08 15:39:10",
+      "id_format": "project_user"
+    }
+  },
+  "id_format_patterns": {
+    "simple_project": [
+      "test-conversation",
+      "test-e2e-conversation",
+      "test-flag-integration",
+      "test-project"
+    ],
+    "project_user": [
+      "test-conversation-project:test-user",
+      "test-reference-project:test-user"
+    ],
+    "other": []
+  },
+  "format_distribution": {
+    "simple_project": 4,
+    "project_user": 2,
+    "other": 0
+  }
+}

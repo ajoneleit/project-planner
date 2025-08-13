@@ -1,50 +1,40 @@
-#\!/bin/bash
+#!/bin/bash
+# Port cleanup script for development environment
+# Kills processes running on common development ports
 
-# Function to show what's using ports
-show_ports() {
-    echo "=== Ports in use ==="
-    netstat -tulpn  < /dev/null |  grep -E ':(3000|3001|8000|8001)\s' || echo "No processes found on common ports"
-    echo ""
-    echo "=== Detailed port info ==="
-    lsof -i :3000,3001,8000,8001 2>/dev/null || echo "No detailed info available"
-}
+set -e
 
-# Function to kill processes on specific ports
-kill_port() {
-    local port=$1
-    echo "Killing processes on port $port..."
-    fuser -k ${port}/tcp 2>/dev/null || echo "No processes found on port $port"
-}
+echo "🧹 Cleaning up development ports..."
 
-# Show current usage
-show_ports
+# Common development ports
+PORTS=(3000 8000 8080 3001 5000 5173 4000)
+
+for port in "${PORTS[@]}"; do
+    echo "Checking port $port..."
+    
+    # Find processes using the port
+    PIDS=$(lsof -ti :$port 2>/dev/null || true)
+    
+    if [ -n "$PIDS" ]; then
+        echo "  🔥 Killing processes on port $port: $PIDS"
+        echo $PIDS | xargs -r kill -9
+        sleep 1
+        
+        # Verify the port is free
+        if ! lsof -ti :$port >/dev/null 2>&1; then
+            echo "  ✅ Port $port is now free"
+        else
+            echo "  ⚠️  Some processes may still be running on port $port"
+        fi
+    else
+        echo "  ✅ Port $port is already free"
+    fi
+done
 
 echo ""
-echo "Commands you can use:"
-echo "  ./port-cleanup.sh show     - Show current port usage"
-echo "  ./port-cleanup.sh kill 3000 - Kill processes on port 3000"
-echo "  ./port-cleanup.sh killall   - Kill processes on all common ports"
-
-case "$1" in
-    "show")
-        show_ports
-        ;;
-    "kill")
-        if [ -n "$2" ]; then
-            kill_port $2
-        else
-            echo "Usage: $0 kill <port_number>"
-        fi
-        ;;
-    "killall")
-        echo "Killing all processes on development ports..."
-        kill_port 3000
-        kill_port 3001
-        kill_port 8000
-        kill_port 8001
-        echo "Done\!"
-        ;;
-    *)
-        echo "Usage: $0 {show|kill <port>|killall}"
-        ;;
-esac
+echo "🎉 Port cleanup complete!"
+echo ""
+echo "Common development commands:"
+echo "  Backend:  poetry run uvicorn app.main:app --reload --port 8000"
+echo "  Frontend: cd web && npm run dev"
+echo "  Docker:   docker run -p 8000:8000 planner-bot"

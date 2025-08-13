@@ -1,0 +1,79 @@
+{
+  "timestamp": "20250811_085319",
+  "migration_phase": "phase_3_migration",
+  "statistics": {
+    "conversations_analyzed": 6,
+    "conversations_migrated": 0,
+    "messages_migrated": 0,
+    "consolidations_performed": 0,
+    "errors_encountered": 0
+  },
+  "migration_plan": {
+    "test-conversation": {
+      "original_id": "test-conversation",
+      "target_id": "test-conversation:anonymous",
+      "format_type": "simple_project",
+      "message_count": 1,
+      "user_ids": [
+        "test-user"
+      ],
+      "needs_consolidation": false,
+      "consolidate_with": []
+    },
+    "test-conversation-project:test-user": {
+      "original_id": "test-conversation-project:test-user",
+      "target_id": "test-conversation-project:test-user",
+      "format_type": "project_user",
+      "message_count": 4,
+      "user_ids": [
+        "test-user"
+      ],
+      "needs_consolidation": false,
+      "consolidate_with": []
+    },
+    "test-e2e-conversation": {
+      "original_id": "test-e2e-conversation",
+      "target_id": "test-e2e-conversation:anonymous",
+      "format_type": "simple_project",
+      "message_count": 2,
+      "user_ids": [
+        "test-user"
+      ],
+      "needs_consolidation": false,
+      "consolidate_with": []
+    },
+    "test-flag-integration": {
+      "original_id": "test-flag-integration",
+      "target_id": "test-flag-integration:anonymous",
+      "format_type": "simple_project",
+      "message_count": 2,
+      "user_ids": [
+        "test-user"
+      ],
+      "needs_consolidation": false,
+      "consolidate_with": []
+    },
+    "test-project": {
+      "original_id": "test-project",
+      "target_id": "test-project:anonymous",
+      "format_type": "simple_project",
+      "message_count": 2,
+      "user_ids": [
+        "test-user"
+      ],
+      "needs_consolidation": false,
+      "consolidate_with": []
+    },
+    "test-reference-project:test-user": {
+      "original_id": "test-reference-project:test-user",
+      "target_id": "test-reference-project:test-user",
+      "format_type": "project_user",
+      "message_count": 12,
+      "user_ids": [
+        "test-user"
+      ],
+      "needs_consolidation": false,
+      "consolidate_with": []
+    }
+  }
+}

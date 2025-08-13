@@ -1,0 +1,113 @@
+{
+  "current_phase": "phase_5_cleanup",
+  "flags": {
+    "conversation_id_manager": {
+      "name": "conversation_id_manager",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_1_safety",
+      "description": "Enable unified conversation ID management system",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": false,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "memory_migration_logging": {
+      "name": "memory_migration_logging",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_1_safety",
+      "description": "Enable detailed logging for memory system migration",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": false,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "data_integrity_validation": {
+      "name": "data_integrity_validation",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_1_safety",
+      "description": "Enable data integrity checks during operations",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": false,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "unified_memory_primary": {
+      "name": "unified_memory_primary",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_2_unified",
+      "description": "Use unified memory as primary system (dual-write mode)",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": true,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "compatibility_layer_active": {
+      "name": "compatibility_layer_active",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_2_unified",
+      "description": "Keep compatibility layer active during migration",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": false,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "active_data_migration": {
+      "name": "active_data_migration",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_3_migration",
+      "description": "Enable active migration of conversation data",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": true,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "legacy_system_read_only": {
+      "name": "legacy_system_read_only",
+      "enabled": false,
+      "rollout_percentage": 0.0,
+      "migration_phase": "phase_3_migration",
+      "description": "Make legacy system read-only during migration",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": false,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "migration_validation": {
+      "name": "migration_validation",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_4_validation",
+      "description": "Enable comprehensive migration validation",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": false,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    },
+    "legacy_system_disabled": {
+      "name": "legacy_system_disabled",
+      "enabled": true,
+      "rollout_percentage": 100.0,
+      "migration_phase": "phase_5_cleanup",
+      "description": "Disable legacy memory system completely",
+      "max_rollout_percentage": 100.0,
+      "requires_confirmation": true,
+      "created_at": null,
+      "updated_at": null,
+      "created_by": "system"
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ReactQueryProvider } from '@/components/providers/react-query-provider'
 import { UserProvider } from '@/contexts/UserContext'
+import { ThemeProvider } from '@/contexts/theme-context'
 import { AutoUserIdentityModal } from '@/components/UserIdentityModal'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -18,14 +19,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ReactQueryProvider>
-          <UserProvider>
-            {children}
-            <AutoUserIdentityModal />
-          </UserProvider>
-        </ReactQueryProvider>
+        <ThemeProvider>
+          <ReactQueryProvider>
+            <UserProvider>
+              {children}
+              <AutoUserIdentityModal />
+            </UserProvider>
+          </ReactQueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
