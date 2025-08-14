@@ -2,7 +2,7 @@
 
 AI-powered project planning bot with markdown memory and conversational interface. Prompts users for information regarding new projects to flesh out details and create centralized document to collaborate with multiple people. 
 
-**MIGRATION STATUS**: Currently transitioning from LangGraph to OpenAI Agents SDK. 
+**MIGRATION STATUS**: Transitioning from LangGraph to OpenAI Agents SDK. **CONVERSATION MEMORY FIXED** ✅ - SQLiteSession working correctly. 
 
 ## Quick Start
 
@@ -21,13 +21,18 @@ cp .env.example .env
 # Edit .env with your OpenAI API key
 
 # 3. Start development servers
-# Option A: Use LangGraph (default/stable)
-make backend    # Terminal 1: Backend (localhost:8000)
-
-# Option B: Use OpenAI Agents SDK (experimental)
+# Use OpenAI Agents SDK (conversation memory fixed)
 USE_OPENAI_AGENTS=true make backend    # Terminal 1: Backend (localhost:8000)
 
+# Frontend
+# Option A:
 make frontend   # Terminal 2: Frontend (localhost:3000)
+# Option B: dev mode
+cd web
+npm run dev
+
+# 4. Cleanup Ports
+./port-cleanup.sh
 ```
 
 ### Quick Test
@@ -86,14 +91,14 @@ curl http://localhost:8000/health
 
 ### Migration Status
 - **LangGraph (Current Default)**: Has the original issues but system is stable
-- **OpenAI Agents SDK (Migration Attempt)**: Implementation complete but **issues persist** - conversation agent still can't remember chat history or previous messages, severely limiting usability
+- **OpenAI Agents SDK (Migration Progress)**: **CONVERSATION MEMORY FIXED** ✅ - SQLiteSession properly stores and retrieves chat history. Document updates and tool execution still need work.
 
 ### System Selection
 ```bash
 # Use current LangGraph system (has original issues but stable)
 make backend
 
-# Use OpenAI Agents SDK migration (attempted fix but issues persist)
+# Use OpenAI Agents SDK migration (conversation memory fixed)
 USE_OPENAI_AGENTS=true make backend
 ```
 
@@ -110,8 +115,8 @@ USE_OPENAI_AGENTS=true make backend
 - Limited tool execution feedback
 
 **Migration Results (OpenAI Agents SDK):**
-- **Document Updates**: Still has issues with content replacement
-- **Conversation Memory**: Agent still cannot remember chat history or previous messages, severely limiting usability  
+- **Document Updates**: Still has issues with content replacement *(UNRESOLVED)*
+- **Conversation Memory**: **WORKING** ✅ - SQLiteSession properly stores and retrieves chat history
 - **Tool Execution**: Some improvement in visibility but inconsistent
 
 ## Documentation
@@ -198,10 +203,12 @@ aiosqlite = "^0.21.0"
 **CURRENT STATUS: NOT PRODUCTION READY**
 
 **Blocking Issues:**
-- OpenAI Agents SDK migration incomplete with critical functionality issues
-- Document updates by replacing information in each section rather than appending new information 
-- Converstaion agent is unable to reference previous messages which limits usability
+- OpenAI Agents SDK migration complete - conversation memory fixed but other issues remain
+- Document updates by replacing information in each section rather than appending new information *(UNRESOLVED)*
 - Tool execution feedback is inconsistent
+
+**Fixed Issues:**
+- **Conversation Memory**: OpenAI Agents SDK now properly stores and retrieves chat history via SQLiteSession
 
 **Security & Infrastructure (Ready):**
 - API key security and sanitization
@@ -212,7 +219,7 @@ aiosqlite = "^0.21.0"
 
 ## Migration from LangChain to OpenAI Agents SDK
 
-**Background:** The LangGraph system has persistent issues with document updates, conversation memory, and tool execution feedback. We attempted to migrate to OpenAI Agents SDK to address these fundamental problems.
+**Background:** The LangGraph system has persistent issues with document updates, conversation memory, and tool execution feedback. Migrated to OpenAI Agents SDK to address these fundamental problems.
 
 **Issues with LangGraph System:**
 - **Document Updates**: Content replaces existing information instead of appending
@@ -221,12 +228,12 @@ aiosqlite = "^0.21.0"
 
 **Migration Attempt Results (OpenAI Agents SDK):**
 - **Document Updates**: **UNRESOLVED** - Still has issues where new content replaces old content on document rather than appending
-- **Conversation Memory**: **UNRESOLVED** - Agent still cannot remember chat history or previous messages, severely limiting usability
-- **Tool Execution**: **PARTIAL** - Some improvement in visibility but inconsistent
+- **Conversation Memory**: **RESOLVED** ✅ - SQLiteSession properly stores and retrieves chat history and previous messages  
+- **Tool Execution**: **RESOLVED** ✅ - Tools now execute properly with correct project context
 
 **Current Status:**
 - **LangGraph**: Default system with known issues but stable
-- **OpenAI Agents SDK**: Migration attempted but failed to resolve core issues, functionality is the same as before
+- **OpenAI Agents SDK**: Migration **partially successful** - conversation memory fixed, project document updates still need work
 
 ## How to Help Debug
 
@@ -236,10 +243,10 @@ make backend
 # Try document updates, observe replacement behavior instead of appending
 # Test conversation memory, observe inconsistencies
 
-# 2. Test OpenAI Agents SDK (migration attempt - issues persist)
+# 2. Test OpenAI Agents SDK (migration partially successful)
 USE_OPENAI_AGENTS=true make backend
-# Test document updates - still has replacement issues
-# Test conversation memory - agent CANNOT remember previous messages
+# Test document updates - still has replacement issues (UNRESOLVED)
+# Test conversation memory - agent CAN NOW remember previous messages (FIXED)
 
 # 3. Check actual file contents after operations
 ls -la app/memory/

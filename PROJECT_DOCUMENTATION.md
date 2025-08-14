@@ -73,8 +73,8 @@ curl http://localhost:8000/health
 ┌─────────────────┐    ┌──────────────────────────────────┐    ┌─────────────────┐
 │   Next.js UI   │◄──►│        FastAPI Backend           │◄──►│   OpenAI LLM    │
 │  (Static SPA)  │    │  ┌─────────────┬─────────────┐    │    │ (o3/gpt-4o-mini)│
-│                │    │  │ API Routes  │ LangGraph   │    │    │  Switchable     │
-│ • React Query  │    │  │ /projects   │ Workflow    │    │    │                 │
+│                │    │  │ API Routes  │ Openai agent│    │    │  Switchable     │
+│ • React Query  │    │  │ /projects   │ SDK         │    │    │                 │
 │ • shadcn/ui    │    │  │ /chat       │ + Agents    │    │    │                 │
 │ • SSE Client   │    │  │ /health     │             │    │    │                 │
 └─────────────────┘    │  └─────────────┴─────────────┘    │    └─────────────────┘
@@ -334,6 +334,7 @@ curl -X POST "http://localhost:8000/api/projects/my-test-project/chat" \
 - `OPENAI_API_KEY` - From AWS Secrets Manager
 - `LANGCHAIN_API_KEY` - From AWS Secrets Manager  
 - `ENVIRONMENT=production`
+- `USE_OPENAI_AGENTS=true`
 
 **Optional:**
 - `DEFAULT_MODEL=gpt-4o-mini`
@@ -393,7 +394,7 @@ curl -X POST "http://localhost:8000/api/projects/my-test-project/chat" \
 | **Resource Management** |  PRODUCTION READY | Automatic cleanup, connection pooling |
 | **Error Handling** |  CRITICAL PATHS READY | Specific error types, proper recovery |
 | **Input Security** |  PRODUCTION READY | Comprehensive validation coverage |
-| **Memory System** |  NOT PRODUCTION READY | Agents can't reference memory |
+| **Memory System** | PRODUCTION READY | Agents can reference conversation history |
 | **Agent Architecture** |  PRODUCTION READY | Consolidated, efficient design |
 
 ---
@@ -575,13 +576,13 @@ poetry run python -c "import app.main; import app.langgraph_runner; print(' All 
 
 ### OpenAI Agents SDK Migration
 
-**Status**: **MIGRATION IN PROGRESS** - LangGraph to OpenAI Agents SDK transition to fix persistent memory system issues
+**Status**: **MIGRATION PARTIALLY SUCCESSFUL** - LangGraph to OpenAI Agents SDK transition with conversation memory fixed
 
-The project is migrating from LangGraph to OpenAI Agents SDK to address fundamental problems with document updates, conversation memory, and tool execution feedback that exist in the current LangGraph implementation.
+The project is migrating from LangGraph to OpenAI Agents SDK to address fundamental problems with document updates, conversation memory, and tool execution feedback. **CONVERSATION MEMORY NOW WORKING** ✅ - SQLiteSession properly stores and retrieves chat history.
 
 #### Current System Selection
 ```bash
-# Use OpenAI Agents SDK (experimental)
+# Use OpenAI Agents SDK (conversation memory fixed)
 USE_OPENAI_AGENTS=true make backend
 
 # Use LangGraph (current system with original issues)
@@ -600,16 +601,30 @@ make backend
 2. **Conversation Memory Persistence** 
    - **Problem**: Agent inconsistently references previous conversation context
    - **Location**: LangGraph memory management
-   - **Migration Result**: **UNRESOLVED** - OpenAI Agents SDK implementation hasn't change memory issues, agent cannot remember previous messages at all
+   - **Migration Result**: **RESOLVED** ✅ - OpenAI Agents SDK with SQLiteSession now properly stores and retrieves chat history and previous messages
 
 3. **Tool Execution Visibility**
    - **Problem**: Users don't see clear feedback when tools execute
    - **Location**: LangGraph streaming implementation
    - **Migration Result**: **PARTIAL** - Some improvement in visibility but still inconsistent
 
+#### TODO
+1. **Inconsistent Document Behavior**
+   - The info agent is supposed to extract all important information from the conversation to automatically add to project document
+   - Doesn't always extract all info or add all info that its told to
+   - Formatting is inconsistent, somnetimes just adds all info to bottom of document rather than updating correct areas by category unless specifically told
+
+2. **NAI helper** 
+   - The conversation agent should follow the conversational_nai_agent.md prompt which details an introduction and interview like process to gain project information from the user
+   - Agent doesn't go through introduction setup or ask sets of questions like detailed in the prompt
+
+3. **User permissions**
+   - Add logins and ability to create public or private projects
+   - Set up project permissions
+
 #### For Developers
 - Test both systems with `USE_OPENAI_AGENTS=true/false`
-- **Critical**:  conversation memory is completely broken - agent cannot remember any previous messages. Alll memory comes from project document which is inconsistent because information is being replaced instead of saved.
+- **Fixed**: ✅ **Conversation memory now working** - OpenAI Agents SDK properly remembers previous messages via SQLiteSession. Document updates still have replacement issues.
 - Verify actual markdown file content after document updates - issues persist in both systems
 - Monitor streaming responses for tool execution indicators
 
@@ -617,4 +632,4 @@ make backend
 
 **Last Updated**: January 2025  
 **Version**: 2.1.0-beta  
-**Status**: Migration Attempted - Core Issues Unresolved
+**Status**: Migration Partially Successful - Conversation Memory Fixed ✅

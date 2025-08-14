@@ -21,6 +21,97 @@ from agents import Agent, Runner, SQLiteSession, function_tool, handoff, RunCont
 logger = logging.getLogger(__name__)
 
 
+# Define standalone function tools (required by OpenAI Agents SDK)
+@function_tool
+async def update_project_document(
+    ctx: RunContextWrapper,
+    project_slug: str, 
+    section: str, 
+    content: str
+) -> str:
+    """Update project markdown document with new information.
+    
+    Args:
+        project_slug: The project identifier
+        section: The section name to update
+        content: The new content for the section
+        
+    Returns:
+        Confirmation message about the update
+    """
+    try:
+        import re
+        from datetime import datetime
+        
+        file_path = Path(f"app/memory/{project_slug}.md")
+        
+        # Read existing content
+        if file_path.exists():
+            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                existing_content = await f.read()
+        else:
+            existing_content = f"# {project_slug.replace('-', ' ').title()} Project\n\n"
+        
+        # Smart section update - append to existing or create new (inline implementation)
+        section_pattern = rf'^## {re.escape(section)}\s*\n(.*?)(?=^## |\Z)'
+        
+        if re.search(section_pattern, existing_content, re.MULTILINE | re.DOTALL):
+            # Section exists, append to it
+            def replace_section(match):
+                section_header = f"## {section}\n"
+                existing_section_content = match.group(1).strip()
+                # Don't add if content already exists to avoid duplicates
+                if content.strip() in existing_section_content:
+                    return f"{section_header}{existing_section_content}\n\n"
+                # Append new content to existing
+                combined_content = f"{existing_section_content}\n\n{content}".strip()
+                return f"{section_header}{combined_content}\n\n"
+            
+            updated_content = re.sub(section_pattern, replace_section, existing_content, flags=re.MULTILINE | re.DOTALL)
+        else:
+            # Section doesn't exist, add it at the end
+            updated_content = f"{existing_content.rstrip()}\n\n## {section}\n\n{content}\n\n"
+        
+        # Write updated content
+        async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+            await f.write(updated_content)
+        
+        logger.info(f"Successfully updated section '{section}' in project {project_slug}")
+        return f"Updated section '{section}' in project {project_slug}"
+        
+    except Exception as e:
+        logger.error(f"Error updating project document: {e}")
+        return f"Error updating document: {str(e)}"
+
+
+@function_tool
+async def read_project_document(
+    ctx: RunContextWrapper,
+    project_slug: str
+) -> str:
+    """Read the current project document content.
+    
+    Args:
+        project_slug: The project identifier
+        
+    Returns:
+        The current document content or error message
+    """
+    try:
+        file_path = Path(f"app/memory/{project_slug}.md")
+        
+        if file_path.exists():
+            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                content = await f.read()
+            return content
+        else:
+            return f"No project document found for {project_slug}"
+            
+    except Exception as e:
+        logger.error(f"Error reading project document: {e}")
+        return f"Error reading document: {str(e)}"
+
+
 class OpenAIAgentsRunner:
     """OpenAI Agents SDK runner that replaces LangGraph workflow."""
     
@@ -67,92 +158,6 @@ class OpenAIAgentsRunner:
 
 You are the "Conversational NAI Problem-Definition Assistant," a professional, politely persistent coach whose mission is to help North Atlantic Industries (NAI) employees turn hazy ideas, pain-points, or requirements into clear, living Markdown documents that any teammate can extend efficiently."""
 
-    @function_tool
-    async def update_project_document(
-        ctx: RunContextWrapper,
-        project_slug: str, 
-        section: str, 
-        content: str
-    ) -> str:
-        """Update project markdown document with new information.
-        
-        Args:
-            project_slug: The project identifier
-            section: The section name to update
-            content: The new content for the section
-            
-        Returns:
-            Confirmation message about the update
-        """
-        try:
-            import re
-            from datetime import datetime
-            
-            file_path = Path(f"app/memory/{project_slug}.md")
-            
-            # Read existing content
-            if file_path.exists():
-                async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
-                    existing_content = await f.read()
-            else:
-                existing_content = f"# {project_slug.replace('-', ' ').title()} Project\n\n"
-            
-            # Smart section update - append to existing or create new (inline implementation)
-            section_pattern = rf'^## {re.escape(section)}\s*\n(.*?)(?=^## |\Z)'
-            
-            if re.search(section_pattern, existing_content, re.MULTILINE | re.DOTALL):
-                # Section exists, append to it
-                def replace_section(match):
-                    section_header = f"## {section}\n"
-                    existing_section_content = match.group(1).strip()
-                    # Don't add if content already exists to avoid duplicates
-                    if content.strip() in existing_section_content:
-                        return f"{section_header}{existing_section_content}\n\n"
-                    # Append new content to existing
-                    combined_content = f"{existing_section_content}\n\n{content}".strip()
-                    return f"{section_header}{combined_content}\n\n"
-                
-                updated_content = re.sub(section_pattern, replace_section, existing_content, flags=re.MULTILINE | re.DOTALL)
-            else:
-                # Section doesn't exist, add it at the end
-                updated_content = f"{existing_content.rstrip()}\n\n## {section}\n\n{content}\n\n"
-            
-            # Write updated content
-            async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
-                await f.write(updated_content)
-            
-            return f"Updated section '{section}' in project {project_slug}"
-            
-        except Exception as e:
-            logger.error(f"Error updating project document: {e}")
-            return f"Error updating document: {str(e)}"
-
-    @function_tool
-    async def read_project_document(
-        ctx: RunContextWrapper,
-        project_slug: str
-    ) -> str:
-        """Read the current project document content.
-        
-        Args:
-            project_slug: The project identifier
-            
-        Returns:
-            The current document content or error message
-        """
-        try:
-            file_path = Path(f"app/memory/{project_slug}.md")
-            
-            if file_path.exists():
-                async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
-                    content = await f.read()
-                return content
-            else:
-                return f"No project document found for {project_slug}"
-                
-        except Exception as e:
-            logger.error(f"Error reading project document: {e}")
-            return f"Error reading document: {str(e)}"
 
     async def _update_markdown_section(self, content: str, section: str, new_content: str) -> str:
         """Update a specific section in markdown content, appending to existing content.
@@ -209,7 +214,7 @@ Your responsibilities:
 
 When users provide project information, automatically extract and document it without asking for permission.""",
             model=os.getenv("DEFAULT_MODEL", "gpt-4o-mini"),  # Use cheaper model for document operations
-            tools=[self.update_project_document, self.read_project_document]
+            tools=[update_project_document, read_project_document]  # Use standalone functions
         )
         
         # Main Agent - handles conversations and delegates to specialized agents
@@ -224,9 +229,13 @@ When users provide project information, automatically extract and document it wi
 
 IMPORTANT: When users provide project information that should be documented, use the update_project_document tool to save it to the appropriate section.
 
-CRITICAL: When updating existing sections, pass ONLY the new content to the tool, not the complete content. The tool will automatically append new content to existing sections. Do NOT read existing content and combine it - just pass the new items that need to be added.""",
+CRITICAL TOOL USAGE:
+1. ALWAYS use the EXACT project_slug from the conversation context - do NOT make up project names
+2. When updating existing sections, pass ONLY the new content to the tool, not the complete content. The tool will automatically append new content to existing sections. 
+3. Do NOT read existing content and combine it - just pass the new items that need to be added.
+4. The project_slug will be provided in the session context - use it exactly as given.""",
             model=os.getenv("DEFAULT_MODEL", "gpt-4o-mini"),  # Use gpt-4o-mini for more reliable tool usage
-            tools=[self.update_project_document, self.read_project_document],  # Direct tool access
+            tools=[update_project_document, read_project_document],  # Direct tool access - use standalone functions
             handoffs=[
                 handoff(self.info_agent, tool_name_override="update_documentation")  # Keep as backup
             ]
@@ -277,8 +286,11 @@ CRITICAL: When updating existing sections, pass ONLY the new content to the tool
                     handoffs=getattr(self.main_agent, 'handoffs', [])
                 )
             
+            # Inject project context into the message
+            contextualized_message = f"[PROJECT: {project_slug}] {user_message}"
+            
             # Run the conversation with session memory
-            result = await Runner.run(agent, user_message, session=session)
+            result = await Runner.run(agent, contextualized_message, session=session)
             
             return {
                 "success": True,
@@ -325,8 +337,11 @@ CRITICAL: When updating existing sections, pass ONLY the new content to the tool
                     handoffs=getattr(self.main_agent, 'handoffs', [])
                 )
             
+            # Inject project context into the message  
+            contextualized_message = f"[PROJECT: {project_slug}] {user_message}"
+            
             # Run streaming conversation with session memory
-            result = Runner.run_streamed(agent, user_message, session=session)
+            result = Runner.run_streamed(agent, contextualized_message, session=session)
             
             # Track streaming state
             has_started = False

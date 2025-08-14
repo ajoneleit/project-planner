@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A conversational AI project planning bot that maintains project state in markdown files within the same Git repository. Built with FastAPI backend and Next.js frontend, deployed as a single containerized service on AWS App Runner.
 
-**MIGRATION STATUS**: Currently migrating from LangGraph to OpenAI Agents SDK to fix persistent issues with document updates, conversation memory, and tool execution feedback. Migration in progress.
+**MIGRATION STATUS**: Migrating from LangGraph to OpenAI Agents SDK. **CONVERSATION MEMORY FIXED** ✅ - SQLiteSession working correctly. Document updates and tool execution feedback still need work.
 
 ## Technology Stack
 
@@ -166,22 +166,23 @@ The project is **migrating from LangGraph to OpenAI Agents SDK** to address fund
 - Reliable conversation memory with SQLiteSession
 - Clear tool execution feedback with streaming indicators
 
-**Current Status**: Migration attempted but **FAILED TO RESOLVE CORE ISSUES**
-- Document updates still replace instead of append
-- **Conversation memory completely broken** - agent cannot remember previous messages
+**Current Status**: Migration **PARTIALLY SUCCESSFUL**
+- Document updates still replace instead of append *(UNRESOLVED)*
+- **Conversation memory WORKING** ✅ - SQLiteSession properly stores and retrieves conversation history
 - Tool execution has some improvements but remains inconsistent
 
 ### System Selection
 
 - **Current Default**: LangGraph system (has original issues)
 - **Migration Path**: Set `USE_OPENAI_AGENTS=true` to use OpenAI Agents SDK
-- **Reality**: OpenAI Agents SDK migration failed to fix the issues - conversation memory is completely broken
+- **Memory Status**: OpenAI Agents SDK successfully fixed conversation memory - messages are properly stored in SQLiteSession database
 
 ### For Developers
 
-To understand the failed migration:
+To understand the current migration state:
 1. Test LangGraph system - observe document replacement and memory issues
-2. Test OpenAI Agents SDK - **observe that issues persist and memory is worse**
+2. Test OpenAI Agents SDK - **conversation memory now works correctly** ✅
 3. Check actual markdown file content after document updates 
-4. Test conversation memory - **OpenAI agent cannot remember previous messages at all**
+4. Test conversation memory - **OpenAI agent properly remembers previous messages in SQLiteSession**
 5. Monitor streaming responses for tool execution indicators
+6. Verify memory persistence by checking `app/memory/conversations.db`
