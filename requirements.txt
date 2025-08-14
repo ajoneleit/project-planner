@@ -34,3 +34,6 @@ flake8>=6.1.0,<7.0.0
 # 
 # Or for development:
 # pip install -r requirements.txt black isort flake8 pytest pytest-asyncio httpx
+
+# OpenAI Agents SDK
+openai-agents>=0.2.6,<1.0.0

@@ -550,52 +550,33 @@ async def chat_with_project(slug: str, request: ChatRequest, http_request: Reque
         use_openai_agents = os.getenv("USE_OPENAI_AGENTS", "false").lower() == "true"
         
         if use_openai_agents:
-            # Phase 2.4: Simplified OpenAI Agents SDK Integration
+            # OpenAI Agents SDK Integration
             from .openai_agents_runner import get_openai_runner
-            from agents import Runner, SQLiteSession
             
             async def stream_agent_response():
-                """Phase 2.4: Simple agent run - no complex workflow management."""
+                """Stream OpenAI Agents SDK responses."""
                 try:
                     runner = await get_openai_runner()
                     
-                    # Phase 2.4: Direct SQLiteSession usage
-                    session = SQLiteSession(f"project_{slug}", str(runner.conversations_db))
+                    # Use the simple non-streaming method and stream the response manually
+                    result = await runner.run_conversation(slug, request.message)
                     
-                    # Phase 2.4: Direct agent run with proper streaming
-                    result = Runner.run_streamed(runner.main_agent, request.message, session=session)
-                    
-                    # Stream the response using SDK's event system
-                    async for event in result.stream_events():
-                        if event.type == "raw_response_event":
-                            if hasattr(event.data, 'delta') and event.data.delta:
-                                yield f"data: {event.data.delta}\n\n"
-                        elif event.type == "run_item_stream_event":
-                            if hasattr(event, 'item') and event.item:
-                                item = event.item
-                                
-                                # Handle tool call events
-                                if item.type == "tool_call_item":
-                                    tool_indicator = "\n\n[Executing tool...]\n"
-                                    for char in tool_indicator:
-                                        yield f"data: {char}\n\n"
-                                        
-                                elif item.type == "tool_call_output_item":
-                                    tool_output = f"\n[Tool completed]\n"
-                                    for char in tool_output:
-                                        yield f"data: {char}\n\n"
-                                        
-                                # Handle message output
-                                elif item.type == "message_output_item":
-                                    if hasattr(item, 'content') and item.content:
-                                        for char in str(item.content):
-                                            yield f"data: {char}\n\n"
+                    if result['success']:
+                        # Stream the response character by character in JSON format
+                        response_text = result['response']
+                        for char in response_text:
+                            yield f"data: {json.dumps({'token': char})}\n\n"
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                    else:
+                        # Stream error message
+                        error_msg = f"Error: {result.get('error', 'Unknown error')}"
+                        yield f"data: {json.dumps({'error': error_msg})}\n\n"
                     
                     yield "data: [DONE]\n\n"
                 except Exception as e:
-                    logger.error(f"Phase 2.4 agent streaming error: {e}")
-                    yield f"data: Error: {str(e)}\n\n"
-                    yield "data: [DONE]\n\n"
+                    logger.error(f"OpenAI Agents error: {e}")
+                    error_msg = f"Error: {str(e)}"
+                    yield f"data: {json.dumps({'error': error_msg})}\n\n"
             
             return StreamingResponse(
                 stream_agent_response(),
@@ -629,21 +610,53 @@ async def get_initial_message(slug: str, user_id: str = "anonymous", http_reques
     """Get initial message for a project based on user state."""
     
     try:
-        from .langgraph_runner import ProjectRegistry, stream_initial_message
+        # Feature flag to choose between LangGraph and OpenAI Agents SDK
+        use_openai_agents = os.getenv("USE_OPENAI_AGENTS", "false").lower() == "true"
         
-        logger.info(f"Initial message request for project {slug} by user {user_id}")
+        logger.info(f"Initial message request for project {slug} by user {user_id} (using {'OpenAI Agents' if use_openai_agents else 'LangGraph'})")
         
-        # Verify project exists
-        projects = await ProjectRegistry.list_projects()
-        if slug not in projects:
-            raise HTTPException(status_code=404, detail="Project not found")
+        if use_openai_agents:
+            # OpenAI Agents SDK: Simple welcome message
+            async def stream_openai_initial_message():
+                """Simple initial message for OpenAI Agents SDK."""
+                try:
+                    # For OpenAI Agents, we can just return a simple welcome message
+                    welcome_message = f"Welcome to {slug.replace('-', ' ').title()}! I'm here to help you with your project planning. What would you like to work on?"
+                    
+                    # Stream character by character in JSON format like the chat endpoint
+                    for char in welcome_message:
+                        yield f"data: {json.dumps({'token': char})}\n\n"
+                    
+                    yield f"data: {json.dumps({'done': True})}\n\n"
+                    
+                except Exception as e:
+                    logger.error(f"Error in OpenAI initial message: {e}")
+                    error_message = "Hello! I'm ready to help with your project."
+                    for char in error_message:
+                        yield f"data: {char}\n\n"
+                    yield "data: [DONE]\n\n"
+            
+            return StreamingResponse(
+                stream_openai_initial_message(),
+                media_type="text/event-stream",
+                headers=get_sse_headers(http_request)
+            )
         
-        # Stream the initial message with proper CORS headers
-        return StreamingResponse(
-            stream_initial_message(slug, user_id),
-            media_type="text/event-stream",
-            headers=get_sse_headers(http_request)
-        )
+        else:
+            # LangGraph system
+            from .langgraph_runner import ProjectRegistry, stream_initial_message
+            
+            # Verify project exists
+            projects = await ProjectRegistry.list_projects()
+            if slug not in projects:
+                raise HTTPException(status_code=404, detail="Project not found")
+            
+            # Stream the initial message with proper CORS headers
+            return StreamingResponse(
+                stream_initial_message(slug, user_id),
+                media_type="text/event-stream",
+                headers=get_sse_headers(http_request)
+            )
         
     except HTTPException:
         raise

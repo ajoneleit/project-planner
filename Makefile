@@ -40,7 +40,7 @@ frontend:
 # Start backend development server  
 backend:
 	export PATH="$$HOME/.local/bin:$$PATH" && \
-	export USE_OPENAI_AGENTS="$${USE_OPENAI_AGENTS:-false}" && \
+	export USE_OPENAI_AGENTS="$$(if [ -n "$$USE_OPENAI_AGENTS" ]; then echo "$$USE_OPENAI_AGENTS"; else echo "false"; fi)" && \
 	poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Start full development stack (requires tmux or run in separate terminals)

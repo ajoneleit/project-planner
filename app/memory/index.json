@@ -1,51 +1,9 @@
 {
-  "ambers-project": {
-    "created": "2025-08-13T13:29:24.980803",
-    "file_path": "ambers-project.md",
+  "project-planner": {
+    "created": "2025-08-14T14:26:43.997606",
+    "file_path": "project-planner.md",
     "status": "active",
-    "name": "ambers-project",
-    "description": "Test project for conversation memory"
-  },
-  "agentic-system": {
-    "created": "2025-08-13T15:59:40.385504",
-    "file_path": "agentic-system.md",
-    "status": "active",
-    "name": "Agentic System",
-    "description": "AI-powered conversational systems project"
-  },
-  "test-openai-agents": {
-    "created": "2025-08-13T16:33:33.560837",
-    "file_path": "test-openai-agents.md",
-    "status": "active",
-    "name": "Test OpenAI Agents",
-    "description": "Testing the new OpenAI Agents SDK implementation"
-  },
-  "phase-24-test-project": {
-    "created": "2025-08-14T08:32:45.338960",
-    "file_path": "phase-24-test-project.md",
-    "status": "active",
-    "name": "Phase 2.4 Test Project",
-    "description": ""
-  },
-  "document-update-test": {
-    "created": "2025-08-14T09:43:58.024089",
-    "file_path": "document-update-test.md",
-    "status": "active",
-    "name": "Document Update Test",
-    "description": "Testing document update functionality"
-  },
-  "fixed-document-test": {
-    "created": "2025-08-14T09:51:29.861043",
-    "file_path": "fixed-document-test.md",
-    "status": "active",
-    "name": "Fixed Document Test",
-    "description": "Testing the fixed document update"
-  },
-  "tool-event-test": {
-    "created": "2025-08-14T09:59:11.915221",
-    "file_path": "tool-event-test.md",
-    "status": "active",
-    "name": "Tool Event Test",
-    "description": "Testing tool event visibility in streaming"
+    "name": "Project planner",
+    "description": "AI bot to help develop project ideas and save project info to a document"
   }
 }

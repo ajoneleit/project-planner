@@ -1,10 +1,10 @@
-# Test Openai Agents
-_Last updated: 2025-08-13 16:33:33_
+# Project Planner
+_Last updated: 2025-08-14 14:26:44_
 
 ---
 
 ## Executive Summary
-Testing the new OpenAI Agents SDK implementation
+AI bot to help develop project ideas and save project info to a document
 
 ---
 
@@ -16,7 +16,7 @@ Testing the new OpenAI Agents SDK implementation
 ---
 
 ## Context
-Testing the new OpenAI Agents SDK implementation
+AI bot to help develop project ideas and save project info to a document
 
 ---
 
@@ -68,4 +68,4 @@ Testing the new OpenAI Agents SDK implementation
 ## Change Log
 
 | Date | Contributor | User ID | Summary |
-| 2025-08-13 16:33:33 | System | system | Initial structured project document created |
+| 2025-08-14 14:26:44 | System | system | Initial structured project document created |
