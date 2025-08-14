@@ -60,7 +60,7 @@ curl http://localhost:8000/health
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **Runtime** | Python 3.11 + Node 20 | Multi-stage Docker build |
-| **Backend** | FastAPI + LangGraph | API server with SSE streaming |
+| **Backend** | FastAPI + OpenAI Agents SDK / LangGraph | API server with SSE streaming (migration in progress) |
 | **LLM** | OpenAI o3 (fallback: gpt-4o-mini) | Switchable via ?model= parameter |
 | **Memory** | Markdown files in `app/memory/*.md` | Version-controlled project state |
 | **Frontend** | Next.js 14 + shadcn/ui + Tailwind | Static chat interface |
@@ -123,29 +123,59 @@ project-planner/
 ├── app/                        # FastAPI backend
 │   ├── main.py                 # FastAPI application with API endpoints
 │   ├── langgraph_runner.py     # LangGraph workflow + memory management
+│   ├── openai_agents_runner.py # OpenAI Agents SDK runner (migration system)
+│   ├── user_registry.py       # User management system
+│   ├── config/                 # Configuration files
+│   │   └── feature_flags.json  # Feature flag settings
 │   ├── core/                   # Core utilities
-│   │   ├── security.py         # Security utilities & sanitization
+│   │   ├── config.py           # Core configuration
+│   │   ├── conversation_id_manager.py # Conversation ID management
 │   │   ├── cors_config.py      # CORS configuration
+│   │   ├── data_validator.py   # Data validation utilities
+│   │   ├── feature_flags.py    # Feature flag system
 │   │   ├── logging_config.py   # Secure logging framework
+│   │   ├── memory_compatibility.py # Compatibility wrappers
 │   │   ├── memory_unified.py   # Unified memory system
-│   │   └── memory_compatibility.py # Compatibility wrappers
-│   ├── agents/                 # Core agent system
-│   │   └── core_agents.py      # ConversationAgent, ProjectAgent, IntentRouter
-│   └── memory/                 # Project markdown files (one per project slug)
+│   │   ├── migration_logging.py # Migration logging utilities
+│   │   ├── security.py         # Security utilities & sanitization
+│   │   └── validation.py       # Input validation
+│   └── memory/                 # Project markdown files & databases
+│       ├── *.md                # Individual project documents
+│       ├── conversations.db*   # SQLite conversation database
+│       ├── unified.db*         # Unified memory database
+│       └── index.json          # Project registry
 ├── web/                        # Next.js frontend source
-│   ├── src/app/                # Next.js App Router
-│   ├── components/             # React components
-│   │   ├── ui/                 # shadcn/ui components
-│   │   └── providers/          # React Query provider
-│   └── next.config.ts          # Static export configuration
+│   ├── src/
+│   │   ├── app/                # Next.js App Router
+│   │   ├── components/         # React components
+│   │   │   ├── ui/             # shadcn/ui components
+│   │   │   └── providers/      # React Query provider
+│   │   ├── contexts/           # React contexts
+│   │   ├── hooks/              # React hooks
+│   │   ├── lib/                # Utility libraries
+│   │   ├── types/              # TypeScript types
+│   │   └── utils/              # Utility functions
+│   ├── public/                 # Static assets
+│   ├── next.config.ts          # Static export configuration
+│   └── package.json            # Frontend dependencies
 ├── prompts/                    # System prompts
-│   └── project_planner.md      # Main system prompt  
+│   ├── project_planner.md      # Main system prompt
+│   ├── conversational_nai_agent.md # Conversational agent prompt
+│   └── info_agent.md           # Info agent prompt
 ├── tests/                      # Test files
+├── scripts/                    # Utility scripts
+├── logs/                       # Application logs
+├── migration_backups/          # Database migration backups
+├── cleanup_reports/            # System cleanup reports
+├── validation_reports/         # System validation reports
 ├── Dockerfile                  # Multi-stage build (Node.js + Python)
 ├── deploy-backend.sh           # AWS deployment script
 ├── Makefile                    # Build commands
 ├── pyproject.toml              # Poetry configuration
-└── requirements.txt            # Pip dependencies
+├── requirements.txt            # Pip dependencies
+├── CLAUDE.md                   # Claude Code assistant guidance
+├── PROJECT_DOCUMENTATION.md   # This comprehensive documentation
+└── README.md                   # Project overview and quick start
 ```
 
 ### Development Commands
@@ -322,7 +352,7 @@ curl -X POST "http://localhost:8000/api/projects/my-test-project/chat" \
 
 ## Security & Maintenance
 
-### Security Fixes Implemented ✅
+### Security Fixes Implemented
 
 #### 1. API Key Security Exposure - FIXED
 - **Issue**: API keys logged in plain text
@@ -344,7 +374,7 @@ curl -X POST "http://localhost:8000/api/projects/my-test-project/chat" \
 - **Pattern**: Specific error types instead of generic `Exception`
 - **Files**: `main.py` (100%), `langgraph_runner.py` (critical paths), memory systems
 
-### System Improvements ✅
+### System Improvements 
 
 #### Memory Management
 - **Memory Leaks**: Fixed with automatic cleanup system
@@ -360,11 +390,11 @@ curl -X POST "http://localhost:8000/api/projects/my-test-project/chat" \
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **Resource Management** | ✅ PRODUCTION READY | Automatic cleanup, connection pooling |
-| **Error Handling** | ✅ CRITICAL PATHS READY | Specific error types, proper recovery |
-| **Input Security** | ✅ PRODUCTION READY | Comprehensive validation coverage |
-| **Memory System** | ✅ PRODUCTION READY | Unified system with compatibility |
-| **Agent Architecture** | ✅ PRODUCTION READY | Consolidated, efficient design |
+| **Resource Management** |  PRODUCTION READY | Automatic cleanup, connection pooling |
+| **Error Handling** |  CRITICAL PATHS READY | Specific error types, proper recovery |
+| **Input Security** |  PRODUCTION READY | Comprehensive validation coverage |
+| **Memory System** |  NOT PRODUCTION READY | Agents can't reference memory |
+| **Agent Architecture** |  PRODUCTION READY | Consolidated, efficient design |
 
 ---
 
@@ -466,12 +496,12 @@ poetry show  # List installed packages
 
 **Check basic functionality:**
 ```bash
-poetry run python -c "from app.main import app; print('✅ FastAPI app loads')"
+poetry run python -c "from app.main import app; print(' FastAPI app loads')"
 ```
 
 **Test imports:**
 ```bash
-poetry run python -c "import app.main; import app.langgraph_runner; print('✅ All imports successful')"
+poetry run python -c "import app.main; import app.langgraph_runner; print(' All imports successful')"
 ```
 
 ### Development Workflow
@@ -512,9 +542,9 @@ poetry run python -c "import app.main; import app.langgraph_runner; print('✅ A
 
 ## Development Status
 
-**Core Implementation Complete** ✅:
+**Core Implementation Complete** :
 - FastAPI backend with streaming chat endpoints
-- LangGraph workflow integration
+- LangGraph / Openai Agents SDK workflow integration
 - Next.js frontend with chat interface
 - Markdown-based memory system
 - Docker multi-stage build
@@ -522,7 +552,7 @@ poetry run python -c "import app.main; import app.langgraph_runner; print('✅ A
 - React Query for state management
 - shadcn/ui component library
 
-**Security & Production Readiness** ✅:
+**Security & Production Readiness** :
 - Comprehensive security fixes implemented
 - Input validation and sanitization
 - Proper error handling and recovery
@@ -530,18 +560,61 @@ poetry run python -c "import app.main; import app.langgraph_runner; print('✅ A
 - Agent architecture consolidation
 
 **Features**:
-- ✅ Project creation and management
-- ✅ Real-time chat with streaming responses (SSE)
-- ✅ Markdown memory persistence
-- ✅ Model switching (o3/gpt-4o-mini)
-- ✅ Responsive UI with project sidebar
-- ✅ Health checks and observability hooks
-- ✅ Static file serving via FastAPI
-- ✅ User management and attribution
-- ✅ Project archiving and lifecycle management
+-  Project creation and management
+-  Real-time chat with streaming responses (SSE)
+-  Markdown project file memory 
+-  Responsive UI with project sidebar
+-  Health checks and observability hooks
+-  Static file serving via FastAPI
+-  User management and attribution
+-  Project archiving and lifecycle management
 
 ---
 
-**Last Updated**: August 2025  
-**Version**: 2.0.0  
-**Status**: Production Ready
+## Migration Status & Known Issues
+
+### OpenAI Agents SDK Migration
+
+**Status**: **MIGRATION IN PROGRESS** - LangGraph to OpenAI Agents SDK transition to fix persistent memory system issues
+
+The project is migrating from LangGraph to OpenAI Agents SDK to address fundamental problems with document updates, conversation memory, and tool execution feedback that exist in the current LangGraph implementation.
+
+#### Current System Selection
+```bash
+# Use OpenAI Agents SDK (experimental)
+USE_OPENAI_AGENTS=true make backend
+
+# Use LangGraph (current system with original issues)
+make backend
+```
+
+#### Issues Being Addressed by Migration
+
+**Problems with LangGraph (Current System):**
+
+1. **Document Update Behavior**
+   - **Problem**: Document updates replace existing content instead of appending
+   - **Location**: LangGraph tool execution logic
+   - **Migration Result**: **UNRESOLVED** - OpenAI Agents SDK still has issues with content replacement
+
+2. **Conversation Memory Persistence** 
+   - **Problem**: Agent inconsistently references previous conversation context
+   - **Location**: LangGraph memory management
+   - **Migration Result**: **UNRESOLVED** - OpenAI Agents SDK implementation hasn't change memory issues, agent cannot remember previous messages at all
+
+3. **Tool Execution Visibility**
+   - **Problem**: Users don't see clear feedback when tools execute
+   - **Location**: LangGraph streaming implementation
+   - **Migration Result**: **PARTIAL** - Some improvement in visibility but still inconsistent
+
+#### For Developers
+- Test both systems with `USE_OPENAI_AGENTS=true/false`
+- **Critical**:  conversation memory is completely broken - agent cannot remember any previous messages. Alll memory comes from project document which is inconsistent because information is being replaced instead of saved.
+- Verify actual markdown file content after document updates - issues persist in both systems
+- Monitor streaming responses for tool execution indicators
+
+---
+
+**Last Updated**: January 2025  
+**Version**: 2.1.0-beta  
+**Status**: Migration Attempted - Core Issues Unresolved

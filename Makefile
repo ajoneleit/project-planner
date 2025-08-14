@@ -39,7 +39,9 @@ frontend:
 
 # Start backend development server  
 backend:
-	export PATH="$$HOME/.local/bin:$$PATH" && poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	export PATH="$$HOME/.local/bin:$$PATH" && \
+	export USE_OPENAI_AGENTS="$${USE_OPENAI_AGENTS:-false}" && \
+	poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Start full development stack (requires tmux or run in separate terminals)
 dev:

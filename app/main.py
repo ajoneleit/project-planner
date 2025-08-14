@@ -550,22 +550,55 @@ async def chat_with_project(slug: str, request: ChatRequest, http_request: Reque
         use_openai_agents = os.getenv("USE_OPENAI_AGENTS", "false").lower() == "true"
         
         if use_openai_agents:
-            # Use OpenAI Agents SDK
+            # Phase 2.4: Simplified OpenAI Agents SDK Integration
             from .openai_agents_runner import get_openai_runner
+            from agents import Runner, SQLiteSession
             
-            async def stream_openai_agents_response():
+            async def stream_agent_response():
+                """Phase 2.4: Simple agent run - no complex workflow management."""
                 try:
                     runner = await get_openai_runner()
-                    async for chunk in runner.run_conversation_stream(slug, request.message, request.model):
-                        yield f"data: {chunk}\n\n"
+                    
+                    # Phase 2.4: Direct SQLiteSession usage
+                    session = SQLiteSession(f"project_{slug}", str(runner.conversations_db))
+                    
+                    # Phase 2.4: Direct agent run with proper streaming
+                    result = Runner.run_streamed(runner.main_agent, request.message, session=session)
+                    
+                    # Stream the response using SDK's event system
+                    async for event in result.stream_events():
+                        if event.type == "raw_response_event":
+                            if hasattr(event.data, 'delta') and event.data.delta:
+                                yield f"data: {event.data.delta}\n\n"
+                        elif event.type == "run_item_stream_event":
+                            if hasattr(event, 'item') and event.item:
+                                item = event.item
+                                
+                                # Handle tool call events
+                                if item.type == "tool_call_item":
+                                    tool_indicator = "\n\n[Executing tool...]\n"
+                                    for char in tool_indicator:
+                                        yield f"data: {char}\n\n"
+                                        
+                                elif item.type == "tool_call_output_item":
+                                    tool_output = f"\n[Tool completed]\n"
+                                    for char in tool_output:
+                                        yield f"data: {char}\n\n"
+                                        
+                                # Handle message output
+                                elif item.type == "message_output_item":
+                                    if hasattr(item, 'content') and item.content:
+                                        for char in str(item.content):
+                                            yield f"data: {char}\n\n"
+                    
                     yield "data: [DONE]\n\n"
                 except Exception as e:
-                    logger.error(f"Error in OpenAI Agents streaming: {e}")
+                    logger.error(f"Phase 2.4 agent streaming error: {e}")
                     yield f"data: Error: {str(e)}\n\n"
                     yield "data: [DONE]\n\n"
             
             return StreamingResponse(
-                stream_openai_agents_response(),
+                stream_agent_response(),
                 media_type="text/event-stream",
                 headers=get_sse_headers(http_request)
             )
